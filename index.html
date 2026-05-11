@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>會動的風景畫：齒輪機構助手</title>
+    <title>會動的風景畫：專業機構設計助手</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & Babel -->
@@ -14,7 +14,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body { font-family: sans-serif; -webkit-user-select: none; user-select: none; margin: 0; background-color: #f1f5f9; }
-        canvas { touch-action: none; cursor: crosshair; }
+        canvas { touch-action: none; cursor: crosshair; background-color: #ffffff; }
         input[type="range"] { accent-color: #2563eb; height: 6px; }
         .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; background-color: #eff6ff; }
         
@@ -22,6 +22,13 @@
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        @keyframes pulse-highlight {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .selected-ui { animation: pulse-highlight 2s infinite; border-color: #3b82f6 !important; }
     </style>
 </head>
 <body>
@@ -30,9 +37,7 @@
     <script type="text/babel">
         const { useState, useRef, useEffect, useMemo, useCallback } = React;
         
-        /**
-         * 健壯的圖示組件 (解決解構錯誤)
-         */
+        // 健壯的圖示組件
         const Icon = ({ name, size = 20, className = "" }) => {
             const [iconData, setIconData] = useState(null);
             useEffect(() => {
@@ -48,10 +53,8 @@
                 loadIcon();
                 return () => { mounted = false; };
             }, [name]);
-
             if (!iconData) return <span style={{ width: size, height: size, display: 'inline-block' }} />;
             const children = Array.isArray(iconData[2]) ? iconData[2] : [];
-
             return (
                 <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`inline-block align-middle pointer-events-none ${className}`}>
                     {children.map((child, i) => {
@@ -65,7 +68,26 @@
         };
 
         const App = () => {
-            // 背景圖狀態
+            // --- 物理尺寸與比例設定 (橫式固定規格) ---
+            const SCALE = 2.5; 
+            const BOARD_W_MM = 350; 
+            const BOARD_H_MM = 300; 
+            const GRID_MM = 12;     
+            const COLS = 26;        
+            const ROWS = 25;        
+
+            const CANVAS_W = BOARD_W_MM * SCALE; // 875px
+            const CANVAS_H = BOARD_H_MM * SCALE; // 750px
+
+            const DX = GRID_MM * SCALE;
+            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE; 
+            const GRID_TOTAL_W = (COLS - 1) * DX + (DX / 2);
+            const GRID_TOTAL_H = (ROWS - 1) * DY;
+
+            const OFFSET_X = (CANVAS_W - GRID_TOTAL_W) / 2;
+            const OFFSET_Y = (CANVAS_H - GRID_TOTAL_H) / 2;
+
+            // --- 狀態管理 ---
             const [bgImage, setBgImage] = useState(null);
             const [bgImgObj, setBgImgObj] = useState(null);
             const [opacity, setOpacity] = useState(0.5);
@@ -73,7 +95,6 @@
             const [bgX, setBgX] = useState(0);
             const [bgY, setBgY] = useState(0);
 
-            // 機構狀態
             const [isPlaying, setIsPlaying] = useState(false);
             const [activeTab, setActiveTab] = useState('upload');
             const [components, setComponents] = useState([]);
@@ -81,13 +102,9 @@
             const [time, setTime] = useState(0);
             const [dragging, setDragging] = useState(null);
 
-            const GRID_SIZE = 12;
-            const SCALE = 2.5;
-            const HOLE_SPACING = GRID_SIZE * SCALE;
             const canvasRef = useRef(null);
             const requestRef = useRef();
 
-            // 處理動畫循環
             const animate = () => {
                 if (isPlaying) setTime(prev => prev + 0.04);
                 requestRef.current = requestAnimationFrame(animate);
@@ -98,14 +115,20 @@
                 return () => cancelAnimationFrame(requestRef.current);
             }, [isPlaying]);
 
-            // 刪除邏輯
+            const snapToTriangle = (x, y) => {
+                const r = Math.max(0, Math.min(ROWS - 1, Math.round((y - OFFSET_Y) / DY)));
+                const sy = OFFSET_Y + r * DY;
+                const rowShift = (r % 2 === 0) ? 0 : DX / 2;
+                const c = Math.max(0, Math.min(COLS - 1, Math.round((x - OFFSET_X - rowShift) / DX)));
+                const sx = OFFSET_X + c * DX + rowShift;
+                return { sx, sy };
+            };
+
             const removeComponent = useCallback((idToRemove) => {
-                if (!idToRemove) return;
                 setComponents(prev => {
                     const next = prev.filter(c => c.id !== idToRemove);
-                    const hasInput = next.some(c => c.isInput);
-                    if (!hasInput) {
-                        const firstGear = next[0];
+                    if (next.length > 0 && !next.some(c => c.isInput)) {
+                        const firstGear = next.find(c => c.type === 'gear');
                         if (firstGear) firstGear.isInput = true;
                     }
                     return [...next];
@@ -113,12 +136,9 @@
                 setSelectedId(null);
             }, []);
 
-            // 鍵盤刪除支援
             useEffect(() => {
                 const handleKeyDown = (e) => {
-                    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
-                        removeComponent(selectedId);
-                    }
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) removeComponent(selectedId);
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
@@ -130,10 +150,7 @@
                     const reader = new FileReader();
                     reader.onload = (f) => {
                         const img = new Image();
-                        img.onload = () => {
-                            setBgImgObj(img);
-                            setBgImage(f.target.result);
-                        };
+                        img.onload = () => { setBgImgObj(img); setBgImage(f.target.result); };
                         img.src = f.target.result;
                     };
                     reader.readAsDataURL(file);
@@ -142,58 +159,92 @@
 
             const addGear = (teeth = 12) => {
                 const colorMap = { 12: '#4ade80', 18: '#fb923c', 24: '#fbbf24', 36: '#a855f7', 48: '#6366f1' };
+                const pos = snapToTriangle(CANVAS_W / 2, CANVAS_H / 2);
                 const newGear = {
-                    id: Date.now(), type: 'gear', x: HOLE_SPACING * 5, y: HOLE_SPACING * 5,
+                    id: Date.now(), type: 'gear', x: pos.sx, y: pos.sy,
                     teeth, color: colorMap[teeth] || '#94a3b8',
-                    isInput: components.length === 0
+                    isInput: components.filter(c => c.type === 'gear').length === 0
                 };
                 setComponents(prev => [...prev, newGear]);
                 setSelectedId(newGear.id);
                 setActiveTab('design');
             };
 
-            // 齒輪連動運算
-            const gearStates = useMemo(() => {
-                const states = {};
-                const inputGear = components.find(c => c.isInput);
-                if (!inputGear) return states;
+            const addLink = () => {
+                const p1 = snapToTriangle(OFFSET_X + DX * 5, OFFSET_Y + DY * 5);
+                const p2 = snapToTriangle(OFFSET_X + DX * 10, OFFSET_Y + DY * 5);
+                const newLink = {
+                    id: Date.now(), type: 'link', x1: p1.sx, y1: p1.sy, x2: p2.sx, y2: p2.sy, color: '#38bdf8'
+                };
+                setComponents(prev => [...prev, newLink]);
+                setSelectedId(newLink.id);
+                setActiveTab('design');
+            };
 
-                states[inputGear.id] = { rotation: time, active: true };
+            const { gearStates, linkAdjustments } = useMemo(() => {
+                const gStates = {};
+                const lAdjs = {};
+                const inputGear = components.find(c => c.type === 'gear' && c.isInput);
+                if (!inputGear) return { gearStates: gStates, linkAdjustments: lAdjs };
+
+                gStates[inputGear.id] = { rotation: time, active: true };
                 const queue = [inputGear];
                 const visited = new Set([inputGear.id]);
 
                 while (queue.length > 0) {
-                    const current = queue.shift();
-                    const currentRot = states[current.id].rotation;
+                    const curr = queue.shift();
+                    const currRot = gStates[curr.id].rotation;
                     components.forEach(other => {
-                        if (!visited.has(other.id)) {
-                            const dist = Math.hypot(current.x - other.x, current.y - other.y);
-                            const meshDist = (current.teeth + other.teeth) * SCALE;
-                            if (Math.abs(dist - meshDist) < 6) {
-                                states[other.id] = { rotation: -currentRot * (current.teeth / other.teeth), active: true };
+                        if (other.type === 'gear' && !visited.has(other.id)) {
+                            const d = Math.hypot(curr.x - other.x, curr.y - other.y);
+                            const meshD = (curr.teeth + other.teeth) * SCALE;
+                            if (Math.abs(d - meshD) < 8) {
+                                gStates[other.id] = { rotation: -currRot * (curr.teeth / other.teeth), active: true };
                                 visited.add(other.id);
                                 queue.push(other);
                             }
                         }
                     });
                 }
-                return states;
-            }, [components, time]);
 
-            const snapToGrid = (v) => Math.round(v / HOLE_SPACING) * HOLE_SPACING;
+                components.forEach(comp => {
+                    if (comp.type === 'link') {
+                        const pts = [{ k: 'p1', x: comp.x1, y: comp.y1 }, { k: 'p2', x: comp.x2, y: comp.y2 }];
+                        pts.forEach(pt => {
+                            Object.keys(gStates).forEach(gid => {
+                                const gear = components.find(x => x.id === parseInt(gid));
+                                if (!gear) return;
+                                const dist = Math.hypot(gear.x - pt.x, gear.y - pt.y);
+                                const rad = gear.teeth * SCALE;
+                                if (Math.abs(dist - rad) < 15) {
+                                    const ang = Math.atan2(pt.y - gear.y, pt.x - gear.x);
+                                    const rot = gStates[gear.id].rotation;
+                                    const nx = gear.x + Math.cos(ang + rot - (isPlaying ? time : 0)) * rad;
+                                    const ny = gear.y + Math.sin(ang + rot - (isPlaying ? time : 0)) * rad;
+                                    if (!lAdjs[comp.id]) lAdjs[comp.id] = {};
+                                    lAdjs[comp.id][pt.k] = { x: nx, y: ny };
+                                }
+                            });
+                        });
+                    }
+                });
+                return { gearStates: gStates, linkAdjustments: lAdjs };
+            }, [components, time, isPlaying]);
 
             const handleMouseDown = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const mx = e.clientX - rect.left;
                 const my = e.clientY - rect.top;
-
                 for (const c of [...components].reverse()) {
-                    const radius = c.teeth * SCALE;
-                    if (Math.hypot(c.x - mx, c.y - my) < radius + 15) {
-                        setDragging({ id: c.id, offset: { x: c.x - mx, y: c.y - my } });
-                        setSelectedId(c.id);
-                        setActiveTab('design');
-                        return;
+                    if (c.type === 'link') {
+                        if (Math.hypot(c.x1 - mx, c.y1 - my) < 20) { setDragging({ id: c.id, part: 'p1' }); setSelectedId(c.id); return; }
+                        if (Math.hypot(c.x2 - mx, c.y2 - my) < 20) { setDragging({ id: c.id, part: 'p2' }); setSelectedId(c.id); return; }
+                    }
+                    if (c.type === 'gear') {
+                        if (Math.hypot(c.x - mx, c.y - my) < c.teeth * SCALE + 15) {
+                            setDragging({ id: c.id, part: 'center', offset: { x: c.x - mx, y: c.y - my } });
+                            setSelectedId(c.id); return;
+                        }
                     }
                 }
                 setSelectedId(null);
@@ -204,26 +255,32 @@
                 const rect = canvasRef.current.getBoundingClientRect();
                 const mx = e.clientX - rect.left;
                 const my = e.clientY - rect.top;
-                setComponents(prev => prev.map(c => 
-                    c.id === dragging.id ? { ...c, x: mx + dragging.offset.x, y: my + dragging.offset.y } : c
-                ));
+                setComponents(prev => prev.map(c => {
+                    if (c.id !== dragging.id) return c;
+                    if (c.type === 'gear') return { ...c, x: mx + dragging.offset.x, y: my + dragging.offset.y };
+                    return dragging.part === 'p1' ? { ...c, x1: mx, y1: my } : { ...c, x2: mx, y2: my };
+                }));
             };
 
             const handleMouseUp = () => {
                 if (!dragging) return;
-                setComponents(prev => prev.map(c => 
-                    c.id === dragging.id ? { ...c, x: snapToGrid(c.x), y: snapToGrid(c.y) } : c
-                ));
+                setComponents(prev => prev.map(c => {
+                    if (c.id !== dragging.id) return c;
+                    if (c.type === 'gear') {
+                        const { sx, sy } = snapToTriangle(c.x, c.y);
+                        return { ...c, x: sx, y: sy };
+                    }
+                    const { sx: sx1, sy: sy1 } = snapToTriangle(c.x1, c.y1);
+                    const { sx: sx2, sy: sy2 } = snapToTriangle(c.x2, c.y2);
+                    return { ...c, x1: sx1, y1: sy1, x2: sx2, y2: sy2 };
+                }));
                 setDragging(null);
             };
 
-            // Canvas 繪圖渲染
             useEffect(() => {
                 const canvas = canvasRef.current;
-                if (!canvas) return;
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-
                 if (bgImgObj) {
                     ctx.save();
                     ctx.globalAlpha = opacity;
@@ -232,144 +289,168 @@
                     ctx.drawImage(bgImgObj, bgX, bgY, drawW, drawH);
                     ctx.restore();
                 }
-
                 ctx.fillStyle = '#cbd5e1';
-                for (let x = HOLE_SPACING; x < canvas.width; x += HOLE_SPACING) {
-                    for (let y = HOLE_SPACING; y < canvas.height; y += HOLE_SPACING) {
-                        ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2); ctx.fill();
+                for (let r = 0; r < ROWS; r++) {
+                    const y = OFFSET_Y + r * DY;
+                    const rowShift = (r % 2 === 0) ? 0 : DX / 2;
+                    for (let c = 0; c < COLS; c++) {
+                        const x = OFFSET_X + c * DX + rowShift;
+                        ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
                     }
                 }
-
                 components.forEach(c => {
-                    const s = gearStates[c.id] || { rotation: 0, active: false };
-                    const r = c.teeth * SCALE;
-                    ctx.save();
-                    ctx.translate(c.x, c.y);
-                    ctx.rotate(s.rotation);
-                    
-                    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
-                    ctx.strokeStyle = s.active ? '#3b82f6' : (c.id === selectedId ? '#ef4444' : '#475569');
-                    ctx.lineWidth = s.active || c.id === selectedId ? 4 : 2;
-                    ctx.stroke(); 
-                    ctx.fillStyle = c.color + (c.id === selectedId ? 'BB' : '88'); 
-                    ctx.fill();
-                    
-                    for(let i=0; i<c.teeth; i++) {
-                        ctx.rotate((Math.PI * 2) / c.teeth);
-                        ctx.fillStyle = s.active ? '#1e40af' : '#475569';
-                        ctx.fillRect(r - 2, -2, 6, 4);
+                    if (c.type === 'gear') {
+                        const s = gearStates[c.id] || { rotation: 0, active: false };
+                        const r = c.teeth * SCALE;
+                        ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(s.rotation);
+                        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+                        ctx.strokeStyle = s.active ? '#3b82f6' : (c.id === selectedId ? '#ef4444' : '#475569');
+                        ctx.lineWidth = s.active || c.id === selectedId ? 4 : 2;
+                        ctx.stroke(); ctx.fillStyle = c.color + (c.id === selectedId ? 'BB' : '88'); ctx.fill();
+                        for(let i=0; i<c.teeth; i++) {
+                            ctx.rotate((Math.PI * 2) / c.teeth);
+                            ctx.fillStyle = s.active ? '#1e40af' : '#475569';
+                            ctx.fillRect(r - 2, -2, 6, 4);
+                        }
+                        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                        ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
+                        if (c.isInput) { ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke(); }
+                        ctx.restore();
+                    } else if (c.type === 'link') {
+                        const adj = linkAdjustments[c.id] || {};
+                        const x1 = adj.p1 ? adj.p1.x : c.x1, y1 = adj.p1 ? adj.p1.y : c.y1;
+                        const x2 = adj.p2 ? adj.p2.x : c.x2, y2 = adj.p2 ? adj.p2.y : c.y2;
+                        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+                        ctx.strokeStyle = c.id === selectedId ? '#ef4444' : c.color;
+                        ctx.lineWidth = 14; ctx.lineCap = 'round'; ctx.stroke();
+                        ctx.fillStyle = '#1e293b';
+                        ctx.beginPath(); ctx.arc(x1, y1, 6, 0, Math.PI * 2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(x2, y2, 6, 0, Math.PI * 2); ctx.fill();
                     }
-                    
-                    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
-                    ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
-                    ctx.restore();
                 });
-            }, [components, bgImgObj, opacity, bgScale, bgX, bgY, gearStates, selectedId]);
+            }, [components, bgImgObj, opacity, bgScale, bgX, bgY, gearStates, linkAdjustments, selectedId]);
 
             return (
-                <div className="flex flex-col h-screen text-slate-900 overflow-hidden bg-slate-50">
-                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-xl z-20">
+                <div className="flex flex-col h-screen text-slate-900 overflow-hidden bg-slate-200 font-sans">
+                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-2xl z-20 border-b border-white/10 flex-shrink-0">
                         <div className="flex items-center gap-3">
-                            <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Settings" size={24} /></div>
+                            <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
                             <div>
-                                <h1 className="text-xl font-bold tracking-tight mb-0.5 leading-none text-white">會動的風景畫：設計助手</h1>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">MOMAKER Studio 齒輪教育版</p>
+                                <h1 className="text-xl font-black tracking-tight mb-0.5 leading-none">會動的風景畫：設計助手</h1>
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold leading-none">350x300mm | 26x25 三角孔位</p>
                             </div>
                         </div>
                     </header>
 
                     <div className="flex flex-1 overflow-hidden">
-                        <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shadow-2xl z-10">
+                        {/* 左側邊欄 */}
+                        <aside className="w-80 bg-white border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0">
                             <div className="flex border-b border-slate-200 bg-slate-50 p-1">
                                 {['upload', 'design'].map(tab => (
                                     <button key={tab} onClick={() => setActiveTab(tab)}
-                                        className={`flex-1 py-3 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400'}`}>
-                                        {tab === 'upload' ? '1. 畫作調整' : '2. 放置齒輪'}
+                                        className={`flex-1 py-3 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                                        {tab === 'upload' ? '1. 畫作調整' : '2. 放置零件'}
                                     </button>
                                 ))}
                             </div>
-                            <div className="flex-1 overflow-y-auto p-5 space-y-8">
+                            
+                            <div className="flex-1 overflow-y-auto p-5 space-y-6">
                                 {activeTab === 'upload' && (
-                                    <div className="space-y-6">
-                                        <div className="p-6 border-2 border-dashed border-slate-200 rounded-3xl text-center bg-slate-50 relative group cursor-pointer hover:border-blue-400 transition-colors">
+                                    <div className="space-y-5">
+                                        <div className="p-6 border-2 border-dashed border-slate-200 rounded-3xl text-center bg-slate-50 relative group cursor-pointer hover:border-blue-400 transition-all">
                                             <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImageUpload} />
-                                            <Icon name="Upload" size={40} className="mx-auto mb-3 text-slate-300" />
-                                            <p className="text-sm font-bold text-slate-500">{bgImage ? '更換風景畫' : '上傳風景畫'}</p>
+                                            <Icon name="Upload" size={40} className="mx-auto mb-3 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                            <p className="text-sm font-bold text-slate-500">上傳你的風景畫</p>
                                         </div>
-                                        
                                         {bgImage && (
-                                            <div className="space-y-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">底圖透明度</label><span className="text-xs font-bold text-blue-600">{Math.round(opacity * 100)}%</span></div>
-                                                    <input type="range" min="0" max="1" step="0.1" value={opacity} onChange={(e) => setOpacity(parseFloat(e.target.value))} className="w-full" />
-                                                </div>
-                                                
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">縮放比例</label><span className="text-xs font-bold text-blue-600">x{bgScale.toFixed(1)}</span></div>
-                                                    <input type="range" min="0.1" max="3" step="0.1" value={bgScale} onChange={(e) => setBgScale(parseFloat(e.target.value))} className="w-full" />
-                                                </div>
-
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">水平位置 (X)</label><span className="text-xs font-bold text-blue-600">{bgX}px</span></div>
-                                                    <input type="range" min="-800" max="800" step="1" value={bgX} onChange={(e) => setBgX(parseInt(e.target.value))} className="w-full" />
-                                                </div>
-
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">垂直位置 (Y)</label><span className="text-xs font-bold text-blue-600">{bgY}px</span></div>
-                                                    <input type="range" min="-800" max="800" step="1" value={bgY} onChange={(e) => setBgY(parseInt(e.target.value))} className="w-full" />
-                                                </div>
+                                            <div className="space-y-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                                {[
+                                                    { label: '透明度', val: opacity, set: setOpacity, min: 0, max: 1, step: 0.1, disp: (v) => Math.round(v*100) + '%' },
+                                                    { label: '縮放比例', val: bgScale, set: setBgScale, min: 0.1, max: 4, step: 0.1, disp: (v) => 'x' + v.toFixed(1) },
+                                                    { label: '水平 (X)', val: bgX, set: setBgX, min: -1000, max: 1000, step: 1, disp: (v) => v + 'px' },
+                                                    { label: '垂直 (Y)', val: bgY, set: setBgY, min: -1000, max: 1000, step: 1, disp: (v) => v + 'px' },
+                                                ].map((item, idx) => (
+                                                    <div key={idx} className="space-y-2">
+                                                        <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase">{item.label}</label><span className="text-xs font-bold text-blue-600">{item.disp(item.val)}</span></div>
+                                                        <input type="range" min={item.min} max={item.max} step={item.step} value={item.val} onChange={(e) => item.set(parseFloat(e.target.value))} className="w-full" />
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </div>
                                 )}
-                                
                                 {activeTab === 'design' && (
-                                    <div className="space-y-8">
-                                        <div className="space-y-3">
-                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">新增齒輪 (模數 2.0)</h3>
+                                    <div className="space-y-6">
+                                        <div className="space-y-4">
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">零件庫 (模數 2.0)</h3>
                                             <div className="grid grid-cols-2 gap-2">
                                                 {[12, 18, 24, 36, 48].map(size => (
                                                     <button key={size} onClick={() => addGear(size)} 
-                                                        className="p-3 border-2 border-slate-100 rounded-2xl bg-white text-[10px] font-black hover:border-blue-400 transition-colors">
-                                                        R{size} 齒輪
-                                                    </button>
+                                                        className="p-3 border-2 border-slate-100 rounded-2xl bg-white text-[10px] font-black hover:border-blue-400 hover:shadow-sm transition-all shadow-sm">R{size} 齒輪</button>
                                                 ))}
                                             </div>
+                                            <button onClick={addLink} className="w-full p-4 bg-white border-2 border-slate-200 text-slate-700 rounded-2xl text-xs font-black shadow-sm hover:border-blue-400 hover:bg-blue-50 transition-all flex items-center justify-center gap-2">
+                                                <Icon name="PlusCircle" size={16} className="text-blue-500" /> 新增活動連桿
+                                            </button>
                                         </div>
                                         {selectedId && (
-                                            <div className="p-5 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-blue-500/50">
+                                            <div className="p-5 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-blue-500/50 selected-ui">
                                                 <div className="flex justify-between items-center mb-5">
-                                                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-tighter">齒輪設定</span>
+                                                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-tighter">零件編輯</span>
                                                     <button onClick={(e) => { e.stopPropagation(); removeComponent(selectedId); }} 
-                                                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all">
-                                                        <Icon name="Trash2" size={16} />
-                                                        <span className="text-[10px] font-black">刪除</span>
+                                                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg transition-all">
+                                                        <Icon name="Trash2" size={16} /><span className="text-[10px] font-black uppercase">刪除</span>
                                                     </button>
                                                 </div>
-                                                <button onClick={() => {
-                                                    setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId })));
-                                                }} className="w-full py-4 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg">設為馬達動力源</button>
+                                                {components.find(c => c.id === selectedId)?.type === 'gear' && (
+                                                    <button onClick={() => {
+                                                        setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId ? true : (c.isInput ? false : c.isInput) })));
+                                                    }} className={`w-full py-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${components.find(c => c.id === selectedId).isInput ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                                                        <Icon name="Zap" size={16} /> {components.find(c => c.id === selectedId).isInput ? '★ 已為主動輪' : '設為動力源'}
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
+
+                            {/* 模擬控制區 (移至邊欄下方，不遮擋底板) */}
+                            <div className="p-5 bg-slate-50 border-t border-slate-200">
+                                <div className="flex flex-col gap-4">
+                                    <div className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+                                        <button 
+                                            onClick={() => setIsPlaying(!isPlaying)} 
+                                            className={`w-12 h-12 rounded-full flex items-center justify-center text-white transition-all shadow-lg active:scale-90 ${isPlaying ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`}
+                                        >
+                                            <Icon name={isPlaying ? "Square" : "Play"} size={24} />
+                                        </button>
+                                        <button 
+                                            onClick={() => { setTime(0); setIsPlaying(false); }} 
+                                            className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-all flex items-center justify-center"
+                                        >
+                                            <Icon name="RotateCcw" size={20} />
+                                        </button>
+                                        <div className="flex-1 border-l border-slate-200 pl-4">
+                                            <span className="text-[8px] font-black uppercase text-slate-400 block mb-0.5 tracking-widest leading-none">狀態</span>
+                                            <div className={`text-[11px] font-black uppercase tracking-tight leading-none ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>
+                                                {isPlaying ? '模擬中' : '待命'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 text-center font-bold tracking-tighter uppercase italic">MOMAKER Studio</p>
+                                </div>
+                            </div>
                         </aside>
 
-                        <main className="flex-1 bg-slate-200 p-10 flex items-center justify-center relative overflow-hidden">
-                            <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden relative border-[16px] border-white" style={{ width: HOLE_SPACING * 25, height: HOLE_SPACING * 18 }}>
-                                <canvas ref={canvasRef} width={HOLE_SPACING * 25} height={HOLE_SPACING * 18}
+                        {/* 主畫布區域 */}
+                        <main className="flex-1 p-12 overflow-auto flex items-start justify-center">
+                            <div className="bg-white rounded-xl shadow-[0_40px_80px_-20px_rgba(0,0,0,0.3)] relative border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0" style={{ width: CANVAS_W, height: CANVAS_H }}>
+                                <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H}
                                     onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} />
                                 
-                                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md px-6 py-2 rounded-full shadow-xl border flex items-center gap-4">
-                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 rounded-full flex items-center justify-center text-white transition-all ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}>
-                                        <Icon name={isPlaying ? "Square" : "Play"} size={20} />
-                                    </button>
-                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="text-slate-400 hover:text-slate-600 p-2"><Icon name="RotateCcw" size={18} /></button>
-                                    <div className="border-l border-slate-200 pl-4 py-1">
-                                        <span className="text-[8px] font-black uppercase text-slate-400 block mb-0.5 tracking-widest">動力狀態</span>
-                                        <div className={`text-[11px] font-black uppercase tracking-tight ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '模擬運轉中' : '系統暫停'}</div>
-                                    </div>
+                                <div className="absolute top-4 right-4 bg-white/60 backdrop-blur px-3 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">
+                                    Isometric: 26x25 Holes
                                 </div>
                             </div>
                         </main>
