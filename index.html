@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>會動的風景畫：齒輪機構助手</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: sans-serif; -webkit-user-select: none; user-select: none; margin: 0; background-color: #f1f5f9; }
+        canvas { touch-action: none; cursor: crosshair; }
+        input[type="range"] { accent-color: #2563eb; height: 6px; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; background-color: #eff6ff; }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect, useMemo, useCallback } = React;
+        
+        /**
+         * 健壯的圖示組件 (解決解構錯誤)
+         */
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const [iconData, setIconData] = useState(null);
+            useEffect(() => {
+                let mounted = true;
+                const loadIcon = () => {
+                    if (window.lucide && window.lucide.icons) {
+                        const data = window.lucide.icons[name];
+                        if (data && mounted) setIconData(data);
+                    } else {
+                        setTimeout(loadIcon, 50);
+                    }
+                };
+                loadIcon();
+                return () => { mounted = false; };
+            }, [name]);
+
+            if (!iconData) return <span style={{ width: size, height: size, display: 'inline-block' }} />;
+            const children = Array.isArray(iconData[2]) ? iconData[2] : [];
+
+            return (
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`inline-block align-middle pointer-events-none ${className}`}>
+                    {children.map((child, i) => {
+                        if (!Array.isArray(child)) return null;
+                        const Tag = child[0];
+                        const attrs = child[1];
+                        return <Tag key={i} {...attrs} />;
+                    })}
+                </svg>
+            );
+        };
+
+        const App = () => {
+            // 背景圖狀態
+            const [bgImage, setBgImage] = useState(null);
+            const [bgImgObj, setBgImgObj] = useState(null);
+            const [opacity, setOpacity] = useState(0.5);
+            const [bgScale, setBgScale] = useState(1.0);
+            const [bgX, setBgX] = useState(0);
+            const [bgY, setBgY] = useState(0);
+
+            // 機構狀態
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [activeTab, setActiveTab] = useState('upload');
+            const [components, setComponents] = useState([]);
+            const [selectedId, setSelectedId] = useState(null);
+            const [time, setTime] = useState(0);
+            const [dragging, setDragging] = useState(null);
+
+            const GRID_SIZE = 12;
+            const SCALE = 2.5;
+            const HOLE_SPACING = GRID_SIZE * SCALE;
+            const canvasRef = useRef(null);
+            const requestRef = useRef();
+
+            // 處理動畫循環
+            const animate = () => {
+                if (isPlaying) setTime(prev => prev + 0.04);
+                requestRef.current = requestAnimationFrame(animate);
+            };
+
+            useEffect(() => {
+                requestRef.current = requestAnimationFrame(animate);
+                return () => cancelAnimationFrame(requestRef.current);
+            }, [isPlaying]);
+
+            // 刪除邏輯
+            const removeComponent = useCallback((idToRemove) => {
+                if (!idToRemove) return;
+                setComponents(prev => {
+                    const next = prev.filter(c => c.id !== idToRemove);
+                    const hasInput = next.some(c => c.isInput);
+                    if (!hasInput) {
+                        const firstGear = next[0];
+                        if (firstGear) firstGear.isInput = true;
+                    }
+                    return [...next];
+                });
+                setSelectedId(null);
+            }, []);
+
+            // 鍵盤刪除支援
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+                        removeComponent(selectedId);
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [selectedId, removeComponent]);
+
+            const handleImageUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (f) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            setBgImgObj(img);
+                            setBgImage(f.target.result);
+                        };
+                        img.src = f.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const addGear = (teeth = 12) => {
+                const colorMap = { 12: '#4ade80', 18: '#fb923c', 24: '#fbbf24', 36: '#a855f7', 48: '#6366f1' };
+                const newGear = {
+                    id: Date.now(), type: 'gear', x: HOLE_SPACING * 5, y: HOLE_SPACING * 5,
+                    teeth, color: colorMap[teeth] || '#94a3b8',
+                    isInput: components.length === 0
+                };
+                setComponents(prev => [...prev, newGear]);
+                setSelectedId(newGear.id);
+                setActiveTab('design');
+            };
+
+            // 齒輪連動運算
+            const gearStates = useMemo(() => {
+                const states = {};
+                const inputGear = components.find(c => c.isInput);
+                if (!inputGear) return states;
+
+                states[inputGear.id] = { rotation: time, active: true };
+                const queue = [inputGear];
+                const visited = new Set([inputGear.id]);
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    const currentRot = states[current.id].rotation;
+                    components.forEach(other => {
+                        if (!visited.has(other.id)) {
+                            const dist = Math.hypot(current.x - other.x, current.y - other.y);
+                            const meshDist = (current.teeth + other.teeth) * SCALE;
+                            if (Math.abs(dist - meshDist) < 6) {
+                                states[other.id] = { rotation: -currentRot * (current.teeth / other.teeth), active: true };
+                                visited.add(other.id);
+                                queue.push(other);
+                            }
+                        }
+                    });
+                }
+                return states;
+            }, [components, time]);
+
+            const snapToGrid = (v) => Math.round(v / HOLE_SPACING) * HOLE_SPACING;
+
+            const handleMouseDown = (e) => {
+                const rect = canvasRef.current.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+
+                for (const c of [...components].reverse()) {
+                    const radius = c.teeth * SCALE;
+                    if (Math.hypot(c.x - mx, c.y - my) < radius + 15) {
+                        setDragging({ id: c.id, offset: { x: c.x - mx, y: c.y - my } });
+                        setSelectedId(c.id);
+                        setActiveTab('design');
+                        return;
+                    }
+                }
+                setSelectedId(null);
+            };
+
+            const handleMouseMove = (e) => {
+                if (!dragging) return;
+                const rect = canvasRef.current.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                setComponents(prev => prev.map(c => 
+                    c.id === dragging.id ? { ...c, x: mx + dragging.offset.x, y: my + dragging.offset.y } : c
+                ));
+            };
+
+            const handleMouseUp = () => {
+                if (!dragging) return;
+                setComponents(prev => prev.map(c => 
+                    c.id === dragging.id ? { ...c, x: snapToGrid(c.x), y: snapToGrid(c.y) } : c
+                ));
+                setDragging(null);
+            };
+
+            // Canvas 繪圖渲染
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (bgImgObj) {
+                    ctx.save();
+                    ctx.globalAlpha = opacity;
+                    const drawW = canvas.width * bgScale;
+                    const drawH = (bgImgObj.height / bgImgObj.width) * drawW;
+                    ctx.drawImage(bgImgObj, bgX, bgY, drawW, drawH);
+                    ctx.restore();
+                }
+
+                ctx.fillStyle = '#cbd5e1';
+                for (let x = HOLE_SPACING; x < canvas.width; x += HOLE_SPACING) {
+                    for (let y = HOLE_SPACING; y < canvas.height; y += HOLE_SPACING) {
+                        ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2); ctx.fill();
+                    }
+                }
+
+                components.forEach(c => {
+                    const s = gearStates[c.id] || { rotation: 0, active: false };
+                    const r = c.teeth * SCALE;
+                    ctx.save();
+                    ctx.translate(c.x, c.y);
+                    ctx.rotate(s.rotation);
+                    
+                    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+                    ctx.strokeStyle = s.active ? '#3b82f6' : (c.id === selectedId ? '#ef4444' : '#475569');
+                    ctx.lineWidth = s.active || c.id === selectedId ? 4 : 2;
+                    ctx.stroke(); 
+                    ctx.fillStyle = c.color + (c.id === selectedId ? 'BB' : '88'); 
+                    ctx.fill();
+                    
+                    for(let i=0; i<c.teeth; i++) {
+                        ctx.rotate((Math.PI * 2) / c.teeth);
+                        ctx.fillStyle = s.active ? '#1e40af' : '#475569';
+                        ctx.fillRect(r - 2, -2, 6, 4);
+                    }
+                    
+                    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
+                    ctx.restore();
+                });
+            }, [components, bgImgObj, opacity, bgScale, bgX, bgY, gearStates, selectedId]);
+
+            return (
+                <div className="flex flex-col h-screen text-slate-900 overflow-hidden bg-slate-50">
+                    <header className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-xl z-20">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Settings" size={24} /></div>
+                            <div>
+                                <h1 className="text-xl font-bold tracking-tight mb-0.5 leading-none text-white">會動的風景畫：設計助手</h1>
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">MOMAKER Studio 齒輪教育版</p>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className="flex flex-1 overflow-hidden">
+                        <aside className="w-80 bg-white border-r border-slate-200 flex flex-col shadow-2xl z-10">
+                            <div className="flex border-b border-slate-200 bg-slate-50 p-1">
+                                {['upload', 'design'].map(tab => (
+                                    <button key={tab} onClick={() => setActiveTab(tab)}
+                                        className={`flex-1 py-3 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400'}`}>
+                                        {tab === 'upload' ? '1. 畫作調整' : '2. 放置齒輪'}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-5 space-y-8">
+                                {activeTab === 'upload' && (
+                                    <div className="space-y-6">
+                                        <div className="p-6 border-2 border-dashed border-slate-200 rounded-3xl text-center bg-slate-50 relative group cursor-pointer hover:border-blue-400 transition-colors">
+                                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImageUpload} />
+                                            <Icon name="Upload" size={40} className="mx-auto mb-3 text-slate-300" />
+                                            <p className="text-sm font-bold text-slate-500">{bgImage ? '更換風景畫' : '上傳風景畫'}</p>
+                                        </div>
+                                        
+                                        {bgImage && (
+                                            <div className="space-y-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-sm">
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">底圖透明度</label><span className="text-xs font-bold text-blue-600">{Math.round(opacity * 100)}%</span></div>
+                                                    <input type="range" min="0" max="1" step="0.1" value={opacity} onChange={(e) => setOpacity(parseFloat(e.target.value))} className="w-full" />
+                                                </div>
+                                                
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">縮放比例</label><span className="text-xs font-bold text-blue-600">x{bgScale.toFixed(1)}</span></div>
+                                                    <input type="range" min="0.1" max="3" step="0.1" value={bgScale} onChange={(e) => setBgScale(parseFloat(e.target.value))} className="w-full" />
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">水平位置 (X)</label><span className="text-xs font-bold text-blue-600">{bgX}px</span></div>
+                                                    <input type="range" min="-800" max="800" step="1" value={bgX} onChange={(e) => setBgX(parseInt(e.target.value))} className="w-full" />
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-center"><label className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">垂直位置 (Y)</label><span className="text-xs font-bold text-blue-600">{bgY}px</span></div>
+                                                    <input type="range" min="-800" max="800" step="1" value={bgY} onChange={(e) => setBgY(parseInt(e.target.value))} className="w-full" />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                {activeTab === 'design' && (
+                                    <div className="space-y-8">
+                                        <div className="space-y-3">
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">新增齒輪 (模數 2.0)</h3>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {[12, 18, 24, 36, 48].map(size => (
+                                                    <button key={size} onClick={() => addGear(size)} 
+                                                        className="p-3 border-2 border-slate-100 rounded-2xl bg-white text-[10px] font-black hover:border-blue-400 transition-colors">
+                                                        R{size} 齒輪
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {selectedId && (
+                                            <div className="p-5 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-blue-500/50">
+                                                <div className="flex justify-between items-center mb-5">
+                                                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-tighter">齒輪設定</span>
+                                                    <button onClick={(e) => { e.stopPropagation(); removeComponent(selectedId); }} 
+                                                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all">
+                                                        <Icon name="Trash2" size={16} />
+                                                        <span className="text-[10px] font-black">刪除</span>
+                                                    </button>
+                                                </div>
+                                                <button onClick={() => {
+                                                    setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId })));
+                                                }} className="w-full py-4 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg">設為馬達動力源</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </aside>
+
+                        <main className="flex-1 bg-slate-200 p-10 flex items-center justify-center relative overflow-hidden">
+                            <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden relative border-[16px] border-white" style={{ width: HOLE_SPACING * 25, height: HOLE_SPACING * 18 }}>
+                                <canvas ref={canvasRef} width={HOLE_SPACING * 25} height={HOLE_SPACING * 18}
+                                    onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} />
+                                
+                                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-md px-6 py-2 rounded-full shadow-xl border flex items-center gap-4">
+                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 rounded-full flex items-center justify-center text-white transition-all ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}>
+                                        <Icon name={isPlaying ? "Square" : "Play"} size={20} />
+                                    </button>
+                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="text-slate-400 hover:text-slate-600 p-2"><Icon name="RotateCcw" size={18} /></button>
+                                    <div className="border-l border-slate-200 pl-4 py-1">
+                                        <span className="text-[8px] font-black uppercase text-slate-400 block mb-0.5 tracking-widest">動力狀態</span>
+                                        <div className={`text-[11px] font-black uppercase tracking-tight ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '模擬運轉中' : '系統暫停'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
