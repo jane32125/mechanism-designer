@@ -14,7 +14,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         body { font-family: sans-serif; -webkit-user-select: none; user-select: none; margin: 0; background-color: #f1f5f9; }
-        canvas { touch-action: none; cursor: crosshair; background-color: #ffffff; }
+        canvas { touch-action: none; cursor: crosshair; background-color: #ffffff; display: block; }
         input[type="range"] { accent-color: #2563eb; height: 6px; }
         .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; background-color: #eff6ff; }
         
@@ -67,7 +67,7 @@
         };
 
         const App = () => {
-            // --- 物理尺寸與比例設定 ---
+            // --- 物理尺寸與比例設定 (橫式) ---
             const SCALE = 2.5; 
             const BOARD_W_MM = 350; 
             const BOARD_H_MM = 300; 
@@ -75,11 +75,13 @@
             const COLS = 26;        
             const ROWS = 25;        
 
-            const CANVAS_W = BOARD_W_MM * SCALE; 
-            const CANVAS_H = BOARD_H_MM * SCALE; 
+            const CANVAS_W = BOARD_W_MM * SCALE; // 875px
+            const CANVAS_H = BOARD_H_MM * SCALE; // 750px
 
             const DX = GRID_MM * SCALE;
             const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE; 
+
+            // 正確計算正三角形網格總寬高以進行置中
             const GRID_TOTAL_W = (COLS - 1) * DX + (DX / 2);
             const GRID_TOTAL_H = (ROWS - 1) * DY;
 
@@ -89,7 +91,6 @@
             // --- 狀態管理 ---
             const [images, setImages] = useState([]); 
             const [selectedImgId, setSelectedImgId] = useState(null);
-
             const [isPlaying, setIsPlaying] = useState(false);
             const [activeTab, setActiveTab] = useState('upload');
             const [components, setComponents] = useState([]);
@@ -139,7 +140,6 @@
                 return () => window.removeEventListener('keydown', handleKeyDown);
             }, [selectedId, removeComponent]);
 
-            // --- 圖片處理 ---
             const handleImageUpload = (e) => {
                 const files = Array.from(e.target.files);
                 files.forEach(file => {
@@ -174,7 +174,6 @@
                 if (selectedImgId === id) setSelectedImgId(null);
             };
 
-            // --- 機構添加 ---
             const addGear = (teeth = 12) => {
                 const colorMap = { 12: '#4ade80', 18: '#fb923c', 24: '#fbbf24', 36: '#a855f7', 48: '#6366f1' };
                 const pos = snapToTriangle(CANVAS_W / 2, CANVAS_H / 2);
@@ -189,8 +188,8 @@
             };
 
             const addLink = () => {
-                const p1 = snapToTriangle(OFFSET_X + DX * 5, OFFSET_Y + DY * 5);
-                const p2 = snapToTriangle(OFFSET_X + DX * 10, OFFSET_Y + DY * 5);
+                const p1 = snapToTriangle(OFFSET_X + DX * 2, OFFSET_Y + DY * 2);
+                const p2 = snapToTriangle(OFFSET_X + DX * 6, OFFSET_Y + DY * 2);
                 const newLink = {
                     id: Date.now(), type: 'link', x1: p1.sx, y1: p1.sy, x2: p2.sx, y2: p2.sy, color: '#38bdf8'
                 };
@@ -360,7 +359,7 @@
                             <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
                             <div>
                                 <h1 className="text-xl font-black tracking-tight mb-0.5 leading-none text-white">會動的風景畫：設計助手</h1>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">350x300mm | 多圖層管理</p>
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">350x300mm | 26x25 三角孔位</p>
                             </div>
                         </div>
                     </header>
@@ -382,7 +381,7 @@
                                         <div className="p-6 border-2 border-dashed border-slate-200 rounded-3xl text-center bg-slate-50 relative group cursor-pointer hover:border-blue-400 transition-all">
                                             <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImageUpload} />
                                             <Icon name="PlusCircle" size={40} className="mx-auto mb-3 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                                            <p className="text-sm font-bold text-slate-500">新增畫作圖片</p>
+                                            <p className="text-sm font-bold text-slate-500">上傳畫作圖片</p>
                                         </div>
 
                                         {images.length > 0 && (
@@ -412,7 +411,7 @@
                                                     <h4 className="text-[10px] font-black text-blue-600 uppercase">圖層調整</h4>
                                                     <button onClick={() => removeImage(selectedImageData.id)} className="text-red-500 hover:text-red-700 transition-colors flex items-center gap-1">
                                                         <Icon name="XCircle" size={14} />
-                                                        <span className="text-[10px] font-black uppercase">刪除此圖層</span>
+                                                        <span className="text-[10px] font-black uppercase text-red-500 hover:text-red-700">刪除圖層</span>
                                                     </button>
                                                 </div>
                                                 {[
@@ -450,7 +449,7 @@
                                                     <span className="text-[10px] font-black uppercase text-blue-400 tracking-tighter">零件編輯</span>
                                                     <button onClick={(e) => { e.stopPropagation(); removeComponent(selectedId); }} 
                                                         className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg transition-all">
-                                                        <Icon name="Trash2" size={16} /><span className="text-[10px] font-black uppercase text-white">刪除零件</span>
+                                                        <Icon name="Trash2" size={16} /><span className="text-[10px] font-black uppercase">刪除零件</span>
                                                     </button>
                                                 </div>
                                                 {components.find(c => c.id === selectedId)?.type === 'gear' && (
@@ -474,14 +473,15 @@
                                     <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-all flex items-center justify-center"><Icon name="RotateCcw" size={20} /></button>
                                     <div className="flex-1 border-l border-slate-200 pl-4">
                                         <span className="text-[8px] font-black uppercase text-slate-400 block mb-0.5 tracking-widest leading-none text-center">狀態</span>
-                                        <div className={`text-[11px] font-black uppercase tracking-tight leading-none text-center ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運行中' : '待命'}</div>
+                                        <div className={`text-[11px] font-black uppercase tracking-tight leading-none text-center ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '模擬中' : '待命'}</div>
                                     </div>
                                 </div>
                             </div>
                         </aside>
 
                         <main className="flex-1 p-12 overflow-auto flex items-start justify-center bg-slate-300">
-                            <div className="bg-white rounded-xl shadow-[0_40px_80px_-20px_rgba(0,0,0,0.3)] relative border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0" style={{ width: CANVAS_W, height: CANVAS_H }}>
+                            {/* 加入 box-content 並修正 border 邏輯確保畫布置中不偏移 */}
+                            <div className="bg-white rounded-xl shadow-[0_40px_80px_-20px_rgba(0,0,0,0.3)] relative border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H }}>
                                 <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H}
                                     onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} />
                                 
