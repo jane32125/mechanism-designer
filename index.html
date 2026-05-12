@@ -29,6 +29,10 @@
             100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
         .selected-ui { animation: pulse-highlight 2s infinite; border-color: #3b82f6 !important; }
+        
+        /* 齒輪按鈕動態效果 */
+        .gear-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .gear-btn:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
@@ -37,7 +41,7 @@
     <script type="text/babel">
         const { useState, useRef, useEffect, useMemo, useCallback } = React;
         
-        // 健壯的圖示組件：手動渲染 SVG 避免 UMD 衝突
+        // 健壯的圖示組件
         const Icon = ({ name, size = 20, className = "" }) => {
             const [iconData, setIconData] = useState(null);
             useEffect(() => {
@@ -68,7 +72,7 @@
         };
 
         const App = () => {
-            // --- 物理規格設定 ---
+            // --- 物理規格與顏色設定 ---
             const SCALE = 2.5; 
             const BOARD_W_MM = 350; 
             const BOARD_H_MM = 300; 
@@ -82,12 +86,20 @@
             const DX = GRID_MM * SCALE;
             const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE; 
 
-            // 正確計算 26x25 正三角形網格總寬高以進行置中
             const GRID_TOTAL_W = (COLS - 1) * DX + (DX / 2);
             const GRID_TOTAL_H = (ROWS - 1) * DY;
 
             const OFFSET_X = (CANVAS_W - GRID_TOTAL_W) / 2;
             const OFFSET_Y = (CANVAS_H - GRID_TOTAL_H) / 2;
+
+            // 定義齒輪顏色對應表
+            const GEAR_COLORS = {
+                12: { hex: '#4ade80', name: '翠綠' }, // Green-400
+                18: { hex: '#fb923c', name: '亮橘' }, // Orange-400
+                24: { hex: '#fbbf24', name: '金黃' }, // Amber-400
+                36: { hex: '#a855f7', name: '紫羅蘭' }, // Purple-500
+                48: { hex: '#6366f1', name: '靛藍' }  // Indigo-500
+            };
 
             // --- 狀態管理 ---
             const [images, setImages] = useState([]); 
@@ -112,7 +124,6 @@
                 return () => cancelAnimationFrame(requestRef.current);
             }, [isPlaying]);
 
-            // --- 吸附邏輯 ---
             const snapToTriangle = (x, y) => {
                 const r = Math.max(0, Math.min(ROWS - 1, Math.round((y - OFFSET_Y) / DY)));
                 const sy = OFFSET_Y + r * DY;
@@ -142,7 +153,6 @@
                 return () => window.removeEventListener('keydown', handleKeyDown);
             }, [selectedId, removeComponent]);
 
-            // --- 圖片管理 ---
             const handleImageUpload = (e) => {
                 const files = Array.from(e.target.files);
                 files.forEach(file => {
@@ -167,19 +177,16 @@
                 if(selectedImgId === id) setSelectedImgId(null);
             };
 
-            // --- 零件添加 ---
             const addGear = (teeth = 12) => {
-                const colorMap = { 12: '#4ade80', 18: '#fb923c', 24: '#fbbf24', 36: '#a855f7', 48: '#6366f1' };
                 const pos = snapToTriangle(CANVAS_W / 2, CANVAS_H / 2);
                 setComponents(prev => [...prev, {
                     id: Date.now(), type: 'gear', x: pos.sx, y: pos.sy,
-                    teeth, color: colorMap[teeth] || '#94a3b8',
+                    teeth, color: GEAR_COLORS[teeth].hex,
                     isInput: prev.length === 0
                 }]);
                 setActiveTab('design');
             };
 
-            // --- 模擬引擎 ---
             const gearStates = useMemo(() => {
                 const states = {};
                 const inputGear = components.find(c => c.isInput);
@@ -196,7 +203,6 @@
                         if (!visited.has(other.id)) {
                             const d = Math.hypot(curr.x - other.x, curr.y - other.y);
                             const meshD = (curr.teeth + other.teeth) * SCALE;
-                            // 模數 2 嚙合容許誤差 8px
                             if (Math.abs(d - meshD) < 8) {
                                 states[other.id] = { rotation: -currRot * (curr.teeth / other.teeth), active: true };
                                 visited.add(other.id); queue.push(other);
@@ -207,7 +213,6 @@
                 return states;
             }, [components, time]);
 
-            // --- 互動邏輯 ---
             const handleMouseDown = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const mx = e.clientX - rect.left;
@@ -241,13 +246,11 @@
                 setDragging(null);
             };
 
-            // --- 繪圖渲染 ---
             useEffect(() => {
                 const canvas = canvasRef.current;
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
-                // 1. 繪製圖片圖層
                 images.forEach(imgData => {
                     ctx.save(); ctx.globalAlpha = imgData.opacity;
                     const drawW = canvas.width * imgData.scale;
@@ -256,7 +259,6 @@
                     ctx.restore();
                 });
 
-                // 2. 繪製正三角形孔位
                 ctx.fillStyle = '#cbd5e1';
                 for (let r = 0; r < ROWS; r++) {
                     const y = OFFSET_Y + r * DY;
@@ -266,7 +268,6 @@
                     }
                 }
 
-                // 3. 繪製齒輪
                 components.forEach(c => {
                     const s = gearStates[c.id] || { rotation: 0, active: false };
                     const r = c.teeth * SCALE;
@@ -294,7 +295,7 @@
                             <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
                             <div>
                                 <h1 className="text-xl font-black tracking-tight mb-0.5 leading-none">會動的風景畫：齒輪設計助手</h1>
-                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">350x300mm | 26x25 三角孔位 | 純齒輪版</p>
+                                <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none">350x300mm | 26x25 三角孔位 | 視覺優化版</p>
                             </div>
                         </div>
                     </header>
@@ -320,7 +321,7 @@
                                         </div>
                                         {images.length > 0 && (
                                             <div className="space-y-2">
-                                                <h3 className="text-[10px] font-black uppercase tracking-widest px-2">圖層清單</h3>
+                                                <h3 className="text-[10px] font-black uppercase tracking-widest px-2 text-slate-400">圖層清單</h3>
                                                 {images.map(img => (
                                                     <div key={img.id} onClick={() => setSelectedImgId(img.id)} className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer ${selectedImgId === img.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 bg-white'}`}>
                                                         <div className="w-10 h-10 bg-slate-100 rounded-lg overflow-hidden border border-slate-200"><img src={img.obj.src} className="w-full h-full object-cover" /></div>
@@ -345,19 +346,41 @@
                                 )}
                                 {activeTab === 'design' && (
                                     <div className="space-y-6">
-                                        <h3 className="text-[10px] font-black uppercase tracking-widest text-center text-slate-400">點擊新增齒輪 (模數 2.0)</h3>
+                                        <h3 className="text-[10px] font-black uppercase tracking-widest text-center text-slate-400">新增齒輪 (模數 2.0)</h3>
                                         <div className="grid grid-cols-2 gap-3">
                                             {[12, 18, 24, 36, 48].map(size => (
-                                                <button key={size} onClick={() => addGear(size)} className="p-4 border-2 border-slate-100 rounded-2xl bg-white text-[10px] font-black hover:border-blue-400 transition-all shadow-sm">R{size} 齒輪</button>
+                                                <button 
+                                                    key={size} 
+                                                    onClick={() => addGear(size)} 
+                                                    className="gear-btn p-4 border-2 rounded-2xl flex flex-col items-center gap-2 group"
+                                                    style={{ 
+                                                        borderColor: GEAR_COLORS[size].hex + '40', // 淡化邊框
+                                                        backgroundColor: GEAR_COLORS[size].hex + '08', // 5% 透明背景
+                                                        color: GEAR_COLORS[size].hex 
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.backgroundColor = GEAR_COLORS[size].hex;
+                                                        e.currentTarget.style.color = '#ffffff';
+                                                        e.currentTarget.querySelector('.dot').style.backgroundColor = '#ffffff';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.backgroundColor = GEAR_COLORS[size].hex + '08';
+                                                        e.currentTarget.style.color = GEAR_COLORS[size].hex;
+                                                        e.currentTarget.querySelector('.dot').style.backgroundColor = GEAR_COLORS[size].hex;
+                                                    }}
+                                                >
+                                                    <div className="dot w-3 h-3 rounded-full transition-colors" style={{ backgroundColor: GEAR_COLORS[size].hex }}></div>
+                                                    <span className="text-[10px] font-black uppercase tracking-tighter">R{size} 齒輪</span>
+                                                </button>
                                             ))}
                                         </div>
                                         {selectedId && (
-                                            <div className="p-5 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-slate-700 selected-ui">
+                                            <div className="p-5 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-blue-500/50 selected-ui">
                                                 <div className="flex justify-between items-center mb-5">
                                                     <span className="text-[10px] font-black uppercase text-blue-400 tracking-tighter">零件編輯</span>
                                                     <button onClick={() => removeComponent(selectedId)} className="text-red-400 p-1 hover:bg-red-500/20 rounded-lg"><Icon name="Trash2" size={20} /></button>
                                                 </div>
-                                                <button onClick={() => setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId ? true : (c.isInput ? false : c.isInput) })))} className={`w-full py-4 rounded-xl text-xs font-black transition-all ${components.find(c => c.id === selectedId).isInput ? 'bg-blue-600 shadow-lg text-white' : 'bg-slate-800 text-slate-400'}`}>設為動力主動輪</button>
+                                                <button onClick={() => setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId ? true : (c.isInput ? false : c.isInput) })))} className={`w-full py-4 rounded-xl text-xs font-black transition-all ${components.find(c => c.id === selectedId).isInput ? 'bg-blue-600 shadow-lg text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>設為動力主動輪</button>
                                             </div>
                                         )}
                                     </div>
@@ -374,7 +397,6 @@
                         </aside>
 
                         <main className="flex-1 p-12 overflow-auto flex items-start justify-center bg-slate-300">
-                            {/* 橫式底板：使用 box-content 確保 16px 邊框包裹在 350x300mm 畫布外 */}
                             <div className="bg-white rounded-xl shadow-2xl relative border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H }}>
                                 <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} />
                                 <div className="absolute top-4 right-4 bg-white/60 backdrop-blur px-3 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">350x300mm | 26x25 Holes</div>
