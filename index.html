@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>會動的風景畫：智慧設計助手</title>
+    <title>會動的風景畫：齒輪機構設計助手</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & Babel -->
@@ -11,23 +11,21 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        body { font-family: "PingFang TC", "Heiti TC", "Microsoft JhengHei", sans-serif; -webkit-user-select: none; user-select: none; margin: 0; background-color: #f1f5f9; overflow: hidden; height: 100vh; }
-        canvas { touch-action: none; display: block; background-color: #cbd5e1; }
+        body { font-family: sans-serif; -webkit-user-select: none; user-select: none; margin: 0; background-color: #f1f5f9; overflow: hidden; }
+        canvas { touch-action: none; cursor: crosshair; background-color: #ffffff; display: block; border-radius: 8px; }
         input[type="range"] { accent-color: #2563eb; height: 6px; }
-        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; background-color: #eff6ff; font-weight: 800; }
-        ::-webkit-scrollbar { width: 4px; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; background-color: #eff6ff; font-weight: 800; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         
-        .sidebar-content { height: calc(100vh - 64px - 140px); }
-        @media (max-width: 768px) {
-            .sidebar-content { height: auto; max-height: 45vh; }
+        @keyframes pulse-highlight {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
         }
-        .selected-ui { animation: pulse-border 2s infinite; }
-        @keyframes pulse-border {
-            0% { border-color: rgba(239, 68, 68, 0.5); }
-            50% { border-color: rgba(239, 68, 68, 1); }
-            100% { border-color: rgba(239, 68, 68, 0.5); }
-        }
+        .selected-ui { animation: pulse-highlight 2s infinite; border-color: #3b82f6 !important; }
+        .gear-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
     </style>
 </head>
 <body>
@@ -36,142 +34,151 @@
     <script type="text/babel">
         const { useState, useRef, useEffect, useMemo, useCallback } = React;
 
-        // 內建 SVG 圖示系統
+        // 穩定版 Icon 組件：直接使用內建 SVG，避免外部庫報錯
         const Icon = ({ name, size = 20, className = "" }) => {
             const paths = {
                 Layout: <path d="M3 3h7v7H3zm11 0h7v7h-7zm0 11h7v7h-7zM3 14h7v7H3z" />,
-                Plus: <path d="M12 5v14M5 12h14" />,
-                Trash: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />,
+                PlusCircle: <path d="M12 5v14M5 12h14" />,
+                Trash2: <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" />,
+                Square: <rect x="4" y="4" width="16" height="16" rx="2" />,
                 Play: <path d="m5 3 14 9-14 9V3z" />,
-                Stop: <rect x="4" y="4" width="16" height="16" rx="2" />,
-                Reset: <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8m0-5v5h5" />,
-                Zoom: <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />,
-                Zap: <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+                RotateCcw: <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8m0-5v5h5" />
             };
             return (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                     {paths[name] || <circle cx="12" cy="12" r="10" />}
                 </svg>
             );
         };
 
         const App = () => {
-            // --- 規格設定 ---
+            // --- 物理規格設定 ---
             const SCALE = 2.5; 
-            const DX = 12 * SCALE;
-            const DY = 12 * Math.sin(Math.PI / 3) * SCALE; 
-            const BOARD_W = 350 * SCALE;
-            const BOARD_H = 300 * SCALE;
+            const BOARD_W_MM = 350; 
+            const BOARD_H_MM = 300; 
+            const GRID_MM = 12;     
+            const COLS = 26;        
+            const ROWS = 25;        
+            const CANVAS_W = BOARD_W_MM * SCALE; 
+            const CANVAS_H = BOARD_H_MM * SCALE; 
+            const DX = GRID_MM * SCALE;
+            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE; 
+            const GRID_TOTAL_W = (COLS - 1) * DX + (DX / 2);
+            const GRID_TOTAL_H = (ROWS - 1) * DY;
+            const OFFSET_X = (CANVAS_W - GRID_TOTAL_W) / 2;
+            const OFFSET_Y = (CANVAS_H - GRID_TOTAL_H) / 2;
 
-            const [viewScale, setViewScale] = useState(0.8);
-            const [viewOffset, setViewOffset] = useState({ x: 50, y: 50 });
-            
+            // 更新後的尺寸與顏色
             const GEAR_COLORS = {
-                12: { hex: '#4ade80' }, 18: { hex: '#fb923c' }, 24: { hex: '#fbbf24' },
-                30: { hex: '#22d3ee' }, 36: { hex: '#a855f7' }, 48: { hex: '#6366f1' }
+                12: { hex: '#4ade80', name: '翠綠' },
+                18: { hex: '#fb923c', name: '亮橘' },
+                24: { hex: '#fbbf24', name: '金黃' },
+                30: { hex: '#22d3ee', name: '青藍' }, // 新增尺寸 R30
+                36: { hex: '#a855f7', name: '紫羅蘭' },
+                48: { hex: '#6366f1', name: '靛藍' }
             };
 
-            // --- 狀態管理 ---
             const [images, setImages] = useState([]); 
             const [selectedImgId, setSelectedImgId] = useState(null);
-            const [activeTab, setActiveTab] = useState('design');
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [activeTab, setActiveTab] = useState('upload');
             const [components, setComponents] = useState([]);
             const [selectedId, setSelectedId] = useState(null);
-            const [isPlaying, setIsPlaying] = useState(false);
             const [time, setTime] = useState(0);
-
-            // --- 互動狀態 ---
-            const [dragging, setDragging] = useState(null); 
-            const [panning, setPanning] = useState(null);   
-            const [pinchDist, setPinchDist] = useState(null);
+            const [dragging, setDragging] = useState(null);
 
             const canvasRef = useRef(null);
             const requestRef = useRef();
 
-            // 鍵盤刪除功能
-            const deleteSelected = useCallback(() => {
-                if (selectedId) {
-                    setComponents(prev => {
-                        const next = prev.filter(c => c.id !== selectedId);
-                        // 如果刪掉的是動力源，自動指定下一個
-                        if (next.length > 0 && !next.some(c => c.isInput)) {
-                            next[0].isInput = true;
-                        }
-                        return [...next];
-                    });
-                    setSelectedId(null);
-                }
-            }, [selectedId]);
-
-            useEffect(() => {
-                const handleKeyDown = (e) => {
-                    if (e.key === 'Delete' || e.key === 'Backspace') {
-                        deleteSelected();
-                    }
-                };
-                window.addEventListener('keydown', handleKeyDown);
-                return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [deleteSelected]);
-
             useEffect(() => {
                 const animate = () => {
-                    if (isPlaying) setTime(t => t + 0.04);
+                    if (isPlaying) setTime(prev => prev + 0.04);
                     requestRef.current = requestAnimationFrame(animate);
                 };
                 requestRef.current = requestAnimationFrame(animate);
                 return () => cancelAnimationFrame(requestRef.current);
             }, [isPlaying]);
 
-            // 座標轉換
-            const screenToCanvas = (clientX, clientY) => {
-                const rect = canvasRef.current.getBoundingClientRect();
-                const x = (clientX - rect.left) - viewOffset.x;
-                const y = (clientY - rect.top) - viewOffset.y;
-                return { x: x / viewScale, y: y / viewScale };
-            };
-
             const snapToTriangle = (x, y) => {
-                const r = Math.max(0, Math.round(y / DY));
-                const sy = r * DY;
+                const r = Math.max(0, Math.min(ROWS - 1, Math.round((y - OFFSET_Y) / DY)));
+                const sy = OFFSET_Y + r * DY;
                 const rowShift = (r % 2 === 0) ? 0 : DX / 2;
-                const c = Math.max(0, Math.round((x - rowShift) / DX));
-                const sx = c * DX + rowShift;
+                const c = Math.max(0, Math.min(COLS - 1, Math.round((x - OFFSET_X - rowShift) / DX)));
+                const sx = OFFSET_X + c * DX + rowShift;
                 return { sx, sy };
             };
+
+            const removeComponent = useCallback((idToRemove) => {
+                setComponents(prev => {
+                    const next = prev.filter(c => c.id !== idToRemove);
+                    if (next.length > 0 && !next.some(c => c.isInput)) {
+                        const firstGear = next.find(c => c.type === 'gear');
+                        if (firstGear) firstGear.isInput = true;
+                    }
+                    return [...next];
+                });
+                setSelectedId(null);
+            }, []);
+
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) removeComponent(selectedId);
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [selectedId, removeComponent]);
 
             const handleImageUpload = (e) => {
                 const files = Array.from(e.target.files);
                 files.forEach(file => {
                     const reader = new FileReader();
-                    reader.onload = f => {
+                    reader.onload = (f) => {
                         const img = new Image();
-                        img.onload = () => setImages(prev => [...prev, { id: Date.now()+Math.random(), name: file.name, obj: img, opacity: 0.5, scale: 1.0, x: 0, y: 0 }]);
+                        img.onload = () => {
+                            setImages(prev => [...prev, {
+                                id: Date.now() + Math.random(),
+                                name: file.name, obj: img, opacity: 0.5, scale: 1.0, x: 0, y: 0
+                            }]);
+                        };
                         img.src = f.target.result;
                     };
                     reader.readAsDataURL(file);
                 });
             };
 
-            // --- 動力模擬引擎 ---
+            const updateImage = (id, params) => setImages(prev => prev.map(img => img.id === id ? { ...img, ...params } : img));
+            const removeImage = (id) => { 
+                setImages(prev => prev.filter(img => img.id !== id)); 
+                if(selectedImgId === id) setSelectedImgId(null);
+            };
+
+            const addGear = (teeth = 12) => {
+                const pos = snapToTriangle(CANVAS_W / 2, CANVAS_H / 2);
+                setComponents(prev => [...prev, {
+                    id: Date.now(), type: 'gear', x: pos.sx, y: pos.sy,
+                    teeth, color: GEAR_COLORS[teeth].hex,
+                    isInput: prev.length === 0
+                }]);
+                setActiveTab('design');
+            };
+
             const gearStates = useMemo(() => {
                 const states = {};
-                const input = components.find(c => c.isInput);
-                if (!input) return states;
-                
-                states[input.id] = { rotation: time, active: true };
-                const queue = [input];
-                const visited = new Set([input.id]);
-                
-                while(queue.length > 0) {
+                const inputGear = components.find(c => c.isInput);
+                if (!inputGear) return states;
+                states[inputGear.id] = { rotation: time, active: true };
+                const queue = [inputGear];
+                const visited = new Set([inputGear.id]);
+                while (queue.length > 0) {
                     const curr = queue.shift();
+                    const currRot = states[curr.id].rotation;
                     components.forEach(other => {
                         if (!visited.has(other.id)) {
                             const d = Math.hypot(curr.x - other.x, curr.y - other.y);
-                            if (Math.abs(d - (curr.teeth + other.teeth) * SCALE) < 10) {
-                                const ratio = curr.teeth / other.teeth;
-                                states[other.id] = { rotation: -states[curr.id].rotation * ratio, active: true };
-                                visited.add(other.id);
-                                queue.push(other);
+                            const meshD = (curr.teeth + other.teeth) * SCALE;
+                            if (Math.abs(d - meshD) < 8) {
+                                states[other.id] = { rotation: -currRot * (curr.teeth / other.teeth), active: true };
+                                visited.add(other.id); queue.push(other);
                             }
                         }
                     });
@@ -179,211 +186,192 @@
                 return states;
             }, [components, time]);
 
-            // --- 互動事件 ---
-            const handleStart = (e) => {
-                const isTouch = e.touches && e.touches.length > 0;
-                if (isTouch && e.touches.length === 2) {
-                    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                    setPinchDist(d); return;
-                }
-                const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-                const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-                const { x, y } = screenToCanvas(clientX, clientY);
+            // --- 統一的座標處理器，支援滑鼠與觸控 ---
+            const getCoordinates = (e) => {
+                const rect = canvasRef.current.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (CANVAS_W / rect.width),
+                    y: (clientY - rect.top) * (CANVAS_H / rect.height)
+                };
+            };
 
+            const startDragging = (e) => {
+                const { x, y } = getCoordinates(e);
                 for (const c of [...components].reverse()) {
                     if (Math.hypot(c.x - x, c.y - y) < c.teeth * SCALE + 15) {
                         setDragging({ id: c.id, offset: { x: c.x - x, y: c.y - y } });
                         setSelectedId(c.id); return;
                     }
                 }
-                setPanning({ x: clientX - viewOffset.x, y: clientY - viewOffset.y });
                 setSelectedId(null);
             };
 
-            const handleMove = (e) => {
-                const isTouch = e.touches && e.touches.length > 0;
-                if (isTouch && e.touches.length === 2 && pinchDist) {
-                    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                    setViewScale(prev => Math.max(0.2, Math.min(3, prev * (d / pinchDist))));
-                    setPinchDist(d); return;
-                }
-                const clientX = isTouch ? e.touches[0].clientX : e.clientX;
-                const clientY = isTouch ? e.touches[0].clientY : e.clientY;
-
-                if (dragging) {
-                    const { x, y } = screenToCanvas(clientX, clientY);
-                    setComponents(prev => prev.map(c => c.id === dragging.id ? { ...c, x: x + dragging.offset.x, y: y + dragging.offset.y } : c));
-                } else if (panning) {
-                    setViewOffset({ x: clientX - panning.x, y: clientY - panning.y });
-                }
+            const onMove = (e) => {
+                if (!dragging) return;
+                const { x, y } = getCoordinates(e);
+                setComponents(prev => prev.map(c => 
+                    c.id === dragging.id ? { ...c, x: x + dragging.offset.x, y: y + dragging.offset.y } : c
+                ));
             };
 
-            const handleEnd = () => {
-                if (dragging) {
-                    setComponents(prev => prev.map(c => {
-                        if (c.id !== dragging.id) return c;
-                        const { sx, sy } = snapToTriangle(c.x, c.y);
-                        return { ...c, x: sx, y: sy };
-                    }));
-                }
-                setDragging(null); setPanning(null); setPinchDist(null);
+            const endDragging = () => {
+                if (!dragging) return;
+                setComponents(prev => prev.map(c => {
+                    if (c.id !== dragging.id) return c;
+                    const { sx, sy } = snapToTriangle(c.x, c.y);
+                    return { ...c, x: sx, y: sy };
+                }));
+                setDragging(null);
             };
 
-            // --- 繪圖 ---
             useEffect(() => {
-                const canvas = canvasRef.current; const ctx = canvas.getContext('2d');
-                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.save();
-                ctx.translate(viewOffset.x, viewOffset.y); ctx.scale(viewScale, viewScale);
-
-                // 底板
-                ctx.fillStyle = "#ffffff"; ctx.fillRect(-20, -20, BOARD_W+40, BOARD_H+40);
-                ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1/viewScale; ctx.strokeRect(-20, -20, BOARD_W+40, BOARD_H+40);
-
-                // 圖片層
-                images.forEach(img => {
-                    ctx.save(); ctx.globalAlpha = img.opacity;
-                    const w = BOARD_W * img.scale; const h = (img.obj.height/img.obj.width)*w;
-                    ctx.drawImage(img.obj, img.x, img.y, w, h); ctx.restore();
-                });
-
-                // 孔位
-                ctx.fillStyle = '#cbd5e1';
-                for (let r=0; r<25; r++) {
-                    const rs = (r%2===0)?0:DX/2;
-                    for (let c=0; c<26; c++) { ctx.beginPath(); ctx.arc(c*DX+rs, r*DY, 2, 0, Math.PI*2); ctx.fill(); }
-                }
-
-                // 齒輪
-                components.forEach(c => {
-                    const s = gearStates[c.id] || { rotation: 0 }; const r = c.teeth*SCALE;
-                    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(s.rotation);
-                    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2);
-                    ctx.strokeStyle = c.id === selectedId ? '#ef4444' : (s.active ? '#2563eb' : '#475569');
-                    ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = (GEAR_COLORS[c.teeth]?.hex || '#94a3b8') + '99'; ctx.fill();
-                    for(let i=0; i<c.teeth; i++){ ctx.rotate((Math.PI*2)/c.teeth); ctx.fillStyle='#475569'; ctx.fillRect(r-2, -2, 6, 4); }
-                    ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
+                images.forEach(imgData => {
+                    ctx.save(); ctx.globalAlpha = imgData.opacity;
+                    const drawW = canvas.width * imgData.scale;
+                    const drawH = (imgData.obj.height / imgData.obj.width) * drawW;
+                    ctx.drawImage(imgData.obj, imgData.x, imgData.y, drawW, drawH);
                     ctx.restore();
                 });
-                ctx.restore();
-            }, [components, images, gearStates, selectedId, viewScale, viewOffset]);
+                ctx.fillStyle = '#cbd5e1';
+                for (let r = 0; r < ROWS; r++) {
+                    const y = OFFSET_Y + r * DY;
+                    const rowShift = (r % 2 === 0) ? 0 : DX / 2;
+                    for (let c = 0; c < COLS; c++) {
+                        ctx.beginPath(); ctx.arc(OFFSET_X + c * DX + rowShift, y, 2.2, 0, Math.PI * 2); ctx.fill();
+                    }
+                }
+                components.forEach(c => {
+                    const s = gearStates[c.id] || { rotation: 0, active: false };
+                    const r = c.teeth * SCALE;
+                    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(s.rotation);
+                    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
+                    ctx.strokeStyle = s.active ? '#3b82f6' : (c.id === selectedId ? '#ef4444' : '#475569');
+                    ctx.lineWidth = s.active || c.id === selectedId ? 4 : 2;
+                    ctx.stroke(); ctx.fillStyle = c.color + (c.id === selectedId ? 'BB' : '88'); ctx.fill();
+                    for(let i=0; i<c.teeth; i++) {
+                        ctx.rotate((Math.PI * 2) / c.teeth); ctx.fillStyle = '#475569'; ctx.fillRect(r - 2, -2, 6, 4);
+                    }
+                    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
+                    if (c.isInput) { ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke(); }
+                    ctx.restore();
+                });
+            }, [components, images, gearStates, selectedId]);
 
-            const curActiveImg = useMemo(() => images.find(i => i.id === selectedImgId), [images, selectedImgId]);
+            const activeImg = useMemo(() => images.find(img => img.id === selectedImgId), [images, selectedImgId]);
 
             return (
-                <div className="flex flex-col h-screen overflow-hidden bg-slate-900">
-                    <header className="bg-slate-900 text-white p-3 md:p-4 flex justify-between items-center z-20 shrink-0 border-b border-white/10 shadow-xl">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-blue-600 p-1.5 rounded-lg"><Icon name="Layout" size={20} /></div>
-                            <h1 className="text-base md:text-lg font-black tracking-tight">風景畫設計助手</h1>
+                <div className="flex flex-col h-screen text-slate-900 overflow-hidden bg-slate-200 font-sans">
+                    <header className="bg-slate-900 text-white p-3 md:p-4 flex justify-between items-center shadow-2xl z-20 border-b border-white/10 flex-shrink-0">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
+                            <div>
+                                <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>
+                                <p className="hidden md:block text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none mt-1">350x300mm | 26x25 三角孔位</p>
+                            </div>
                         </div>
-                        <button onClick={() => { setViewScale(0.7); setViewOffset({x:50,y:50}); }} className="bg-white/10 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase flex items-center gap-2 border border-white/10">
-                            <Icon name="Zoom" size={12} /> 重置視角
-                        </button>
                     </header>
 
-                    <div className="flex flex-col md:flex-row flex-1 overflow-hidden relative">
-                        <main className="flex-1 bg-slate-200 relative overflow-hidden">
-                            <canvas ref={canvasRef} onMouseDown={handleStart} onMouseMove={handleMove} onMouseUp={handleEnd} onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd} />
-                            
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-md p-2 rounded-full shadow-2xl flex items-center gap-4 border border-white ring-1 ring-black/5">
-                                <button onClick={() => setIsPlaying(!isPlaying)} className={`w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg transition-all ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}>
-                                    <Icon name={isPlaying ? "Stop" : "Play"} size={24} />
-                                </button>
-                                <button onClick={() => { setTime(0); setIsPlaying(false); }} className="text-slate-400 p-2"><Icon name="Reset" size={20} /></button>
-                                <div className="border-l pl-4 pr-3">
-                                    <div className="text-[8px] text-slate-400 font-black uppercase">模擬狀態</div>
-                                    <div className={`text-[11px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div>
-                                </div>
-                            </div>
-                        </main>
-
-                        <aside className="w-full md:w-80 bg-white border-t md:border-t-0 md:border-l border-slate-200 flex flex-col z-10 shrink-0 shadow-2xl">
-                            <div className="flex border-b bg-slate-50 p-1">
+                    <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
+                        <aside className="w-full md:w-80 bg-white border-b md:border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0 order-2 md:order-1 h-1/3 md:h-auto overflow-hidden">
+                            <div className="flex border-b border-slate-200 bg-slate-50 p-1">
                                 {['upload', 'design'].map(tab => (
-                                    <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-3 text-[11px] font-black uppercase rounded-lg ${activeTab === tab ? 'tab-active' : 'text-slate-400'}`}>
-                                        {tab === 'upload' ? '1. 畫作底圖' : '2. 零件庫'}
+                                    <button key={tab} onClick={() => setActiveTab(tab)}
+                                        className={`flex-1 py-3 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                                        {tab === 'upload' ? '1. 畫作管理' : '2. 放置零件'}
                                     </button>
                                 ))}
                             </div>
                             
-                            <div className="sidebar-content overflow-y-auto p-4 space-y-5">
+                            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4">
                                 {activeTab === 'upload' && (
                                     <div className="space-y-4 text-slate-600">
-                                        <div className="p-5 border-2 border-dashed border-slate-200 rounded-2xl text-center bg-slate-50 relative group cursor-pointer hover:border-blue-400">
+                                        <div className="p-4 border-2 border-dashed border-slate-200 rounded-2xl text-center bg-slate-50 relative group cursor-pointer hover:border-blue-400 transition-all">
                                             <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImageUpload} />
-                                            <Icon name="Plus" size={32} className="mx-auto mb-2 text-slate-300" />
-                                            <p className="text-[11px] font-bold">上傳背景圖片</p>
+                                            <Icon name="PlusCircle" size={32} className="mx-auto mb-2 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                                            <p className="text-xs font-bold">上傳圖片圖層</p>
                                         </div>
-
                                         {images.map(img => (
-                                            <div key={img.id} onClick={() => setSelectedImgId(img.id)} className={`p-2 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${selectedImgId === img.id ? 'border-blue-500 bg-blue-50' : 'bg-white'}`}>
-                                                <div className="w-10 h-10 bg-slate-100 rounded border overflow-hidden"><img src={img.obj.src} className="w-full h-full object-cover" /></div>
+                                            <div key={img.id} onClick={() => setSelectedImgId(img.id)} className={`p-2 rounded-xl border flex items-center gap-3 cursor-pointer ${selectedImgId === img.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 bg-white'}`}>
+                                                <div className="w-8 h-8 bg-slate-100 rounded-lg overflow-hidden border"><img src={img.obj.src} className="w-full h-full object-cover" /></div>
                                                 <span className="flex-1 text-[10px] font-bold truncate">{img.name}</span>
-                                                <button onClick={() => setImages(images.filter(i=>i.id!==img.id))} className="text-slate-300 hover:text-red-500"><Icon name="Trash" size={16} /></button>
+                                                <button onClick={() => removeImage(img.id)} className="text-slate-300 hover:text-red-500"><Icon name="Trash2" size={16} /></button>
                                             </div>
                                         ))}
-
-                                        {curActiveImg && (
-                                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4 shadow-inner">
-                                                <h4 className="text-[10px] font-black text-blue-600 uppercase border-b border-blue-100 pb-2">圖層微調工具</h4>
-                                                {[
-                                                    { label: '透明度', k: 'opacity', min: 0, max: 1, step: 0.05, disp: v => Math.round(v*100)+'%' },
-                                                    { label: '縮放比例', k: 'scale', min: 0.1, max: 4, step: 0.1, disp: v => 'x'+v.toFixed(1) },
-                                                    { label: '水平位置', k: 'x', min: -800, max: 800, step: 1, disp: v => v+'px' },
-                                                    { label: '垂直位置', k: 'y', min: -800, max: 800, step: 1, disp: v => v+'px' }
-                                                ].map(c => (
-                                                    <div key={c.k} className="space-y-1">
-                                                        <div className="flex justify-between text-[10px] font-bold text-slate-500"><span>{c.label}</span><span className="text-blue-600">{c.disp(curActiveImg[c.k])}</span></div>
-                                                        <input type="range" min={c.min} max={c.max} step={c.step} value={curActiveImg[c.k]} onChange={e => {
-                                                            const val = parseFloat(e.target.value);
-                                                            setImages(prev => prev.map(img => img.id === selectedImgId ? {...img, [c.k]: val} : img));
-                                                        }} className="w-full" />
+                                        {activeImg && (
+                                            <div className="space-y-3 bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-inner mt-4">
+                                                <h4 className="text-[10px] font-black text-blue-600 uppercase border-b border-blue-100 pb-1 mb-2">圖層調整</h4>
+                                                {['opacity', 'scale', 'x', 'y'].map(k => (
+                                                    <div key={k} className="space-y-1">
+                                                        <div className="flex justify-between uppercase text-[10px] font-black"><span>{k}</span><span className="text-blue-600">{activeImg[k]}</span></div>
+                                                        <input type="range" min={k==='scale'?0.1:(k==='opacity'?0:-1000)} max={k==='scale'?4:(k==='opacity'?1:1000)} step={k==='x'||k==='y'?1:0.05} value={activeImg[k]} onChange={(e)=>updateImage(selectedImgId,{[k]:parseFloat(e.target.value)})} className="w-full" />
                                                     </div>
                                                 ))}
                                             </div>
                                         )}
                                     </div>
                                 )}
-
                                 {activeTab === 'design' && (
-                                    <div className="space-y-5">
+                                    <div className="space-y-4">
+                                        <h3 className="text-[10px] font-black uppercase tracking-widest text-center text-slate-400">新增齒輪 (模數 2.0)</h3>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {[12, 18, 24, 30, 36, 48].map(sz => (
-                                                <button key={sz} onClick={() => {
-                                                    const pos = snapToTriangle(100, 100);
-                                                    setComponents(prev => [...prev, { id: Date.now(), type: 'gear', x: pos.sx, y: pos.sy, teeth: sz, isInput: prev.length===0 }]);
-                                                }} className="p-3 border-2 bg-white rounded-xl text-[10px] font-black hover:border-blue-500 transition-all flex flex-col items-center gap-1 shadow-sm">
-                                                    <div className="w-3 h-3 rounded-full" style={{backgroundColor: GEAR_COLORS[sz].hex}}></div>
-                                                    R{sz} 齒輪
+                                            {[12, 18, 24, 30, 36, 48].map(size => (
+                                                <button key={size} onClick={() => addGear(size)} 
+                                                    className="gear-btn p-3 border-2 rounded-2xl flex flex-col items-center gap-1 group shadow-sm bg-white"
+                                                    style={{ 
+                                                        borderColor: GEAR_COLORS[size].hex + '40', 
+                                                        color: GEAR_COLORS[size].hex 
+                                                    }}
+                                                >
+                                                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GEAR_COLORS[size].hex }}></div>
+                                                    <span className="text-[10px] font-black uppercase tracking-tighter">R{size} 齒輪</span>
                                                 </button>
                                             ))}
                                         </div>
-
                                         {selectedId && (
-                                            <div className="p-4 bg-slate-900 text-white rounded-2xl shadow-xl space-y-4 border border-white/10 selected-ui">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">零件編輯</span>
-                                                    <button onClick={deleteSelected} className="text-red-400 p-1 hover:bg-red-500/20 rounded-lg transition-all"><Icon name="Trash" size={18} /></button>
+                                            <div className="p-4 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-slate-700 selected-ui mt-4">
+                                                <div className="flex justify-between items-center mb-3">
+                                                    <span className="text-[10px] font-black uppercase text-blue-400 tracking-tighter">零件編輯</span>
+                                                    <button onClick={() => removeComponent(selectedId)} className="text-red-400 p-1 hover:bg-red-500/20 rounded-lg"><Icon name="Trash2" size={20} /></button>
                                                 </div>
-                                                <button onClick={() => setComponents(prev => prev.map(c => ({...c, isInput: c.id === selectedId})))} className={`w-full py-3 rounded-xl text-[10px] font-black transition-all ${components.find(c=>c.id===selectedId)?.isInput ? 'bg-blue-600 shadow-lg text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
-                                                    <Icon name="Zap" size={12} className="inline mr-1" /> 設為動力主動輪
-                                                </button>
-                                                <p className="text-[9px] text-slate-500 text-center italic">提示：選中後按 Delete 鍵亦可刪除</p>
+                                                <button onClick={() => setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId ? true : (c.isInput ? false : c.isInput) })))} className={`w-full py-3 rounded-xl text-[10px] font-black transition-all ${components.find(c => c.id === selectedId).isInput ? 'bg-blue-600 shadow-lg text-white' : 'bg-slate-800 text-slate-400'}`}>設為動力主動輪</button>
                                             </div>
                                         )}
-                                        
-                                        <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-[10px] text-blue-800/70 leading-relaxed italic">
-                                            <b>手機操作秘訣：</b><br/>
-                                            • 單指拖動齒輪：移動位置。<br/>
-                                            • 單指平移動畫：點擊空白處拖動。<br/>
-                                            • 雙指張合：縮放設計區域。
-                                        </div>
                                     </div>
                                 )}
                             </div>
+
+                            <div className="p-4 bg-slate-50 border-t border-slate-200">
+                                <div className="flex items-center gap-4 bg-white p-2 md:p-3 rounded-2xl border border-slate-200 shadow-sm">
+                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white shadow-lg ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}><Icon name={isPlaying ? "Square" : "Play"} size={20} /></button>
+                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center"><Icon name="RotateCcw" size={18} /></button>
+                                    <div className="flex-1 border-l pl-4"><div className={`text-[10px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div></div>
+                                </div>
+                            </div>
                         </aside>
+
+                        <main className="flex-1 p-4 md:p-12 overflow-auto flex items-start justify-center bg-slate-300 order-1 md:order-2">
+                            <div className="bg-white rounded-xl shadow-2xl relative border-[8px] md:border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H }}>
+                                <canvas 
+                                    ref={canvasRef} 
+                                    width={CANVAS_W} 
+                                    height={CANVAS_H} 
+                                    onMouseDown={startDragging} 
+                                    onMouseMove={onMove} 
+                                    onMouseUp={endDragging} 
+                                    onMouseLeave={endDragging}
+                                    onTouchStart={startDragging}
+                                    onTouchMove={onMove}
+                                    onTouchEnd={endDragging}
+                                />
+                                <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-white/60 backdrop-blur px-2 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">350x300mm | 26x25 Holes</div>
+                            </div>
+                        </main>
                     </div>
                 </div>
             );
