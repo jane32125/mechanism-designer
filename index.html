@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>會動的風景畫：齒輪機構設計助手</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -89,6 +89,9 @@
 
             const canvasRef = useRef(null);
             const requestRef = useRef();
+            const [canvasView, setCanvasView] = useState({ scale: 1, x: 0, y: 0 });
+            const pinchRef = useRef(null);
+            const mainRef = useRef(null);
 
             useEffect(() => {
                 const animate = () => {
@@ -98,6 +101,20 @@
                 requestRef.current = requestAnimationFrame(animate);
                 return () => cancelAnimationFrame(requestRef.current);
             }, [isPlaying]);
+
+            useEffect(() => {
+                const fit = () => {
+                    if (!mainRef.current) return;
+                    const mainW = mainRef.current.clientWidth;
+                    const mainH = mainRef.current.clientHeight;
+                    const pad = 16;
+                    const s = Math.min(1, (mainW - 2*pad) / CANVAS_W, (mainH - 2*pad) / CANVAS_H);
+                    setCanvasView({ scale: s, x: CANVAS_W*(1-s)/2, y: CANVAS_H*(1-s)/2 });
+                };
+                fit();
+                window.addEventListener('resize', fit);
+                return () => window.removeEventListener('resize', fit);
+            }, []);
 
             const snapToTriangle = (x, y) => {
                 const r = Math.max(0, Math.min(ROWS - 1, Math.round((y - OFFSET_Y) / DY)));
@@ -198,6 +215,22 @@
             };
 
             const startDragging = (e) => {
+                if (e.touches && e.touches.length === 2) {
+                    const t0 = e.touches[0], t1 = e.touches[1];
+                    const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+                    const midX = (t0.clientX + t1.clientX) / 2;
+                    const midY = (t0.clientY + t1.clientY) / 2;
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    pinchRef.current = {
+                        startDist: dist, startScale: canvasView.scale,
+                        startView: { ...canvasView },
+                        startMidX: midX, startMidY: midY,
+                        rectLeft: rect.left, rectTop: rect.top,
+                        rectWidth: rect.width, rectHeight: rect.height,
+                    };
+                    setDragging(null);
+                    return;
+                }
                 const { x, y } = getCoordinates(e);
                 for (const c of [...components].reverse()) {
                     if (Math.hypot(c.x - x, c.y - y) < c.teeth * SCALE + 15) {
@@ -209,14 +242,30 @@
             };
 
             const onMove = (e) => {
+                if (e.touches && e.touches.length === 2 && pinchRef.current) {
+                    const t0 = e.touches[0], t1 = e.touches[1];
+                    const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+                    const midX = (t0.clientX + t1.clientX) / 2;
+                    const midY = (t0.clientY + t1.clientY) / 2;
+                    const { startDist, startScale, startView, startMidX, startMidY,
+                            rectLeft, rectTop, rectWidth, rectHeight } = pinchRef.current;
+                    const newScale = Math.min(3, Math.max(0.2, startScale * (dist / startDist)));
+                    const anchorCX = (startMidX - rectLeft) * (CANVAS_W / rectWidth);
+                    const anchorCY = (startMidY - rectTop)  * (CANVAS_H / rectHeight);
+                    const newX = midX - rectLeft + startView.x - anchorCX * newScale;
+                    const newY = midY - rectTop  + startView.y - anchorCY * newScale;
+                    setCanvasView({ scale: newScale, x: newX, y: newY });
+                    return;
+                }
                 if (!dragging) return;
                 const { x, y } = getCoordinates(e);
-                setComponents(prev => prev.map(c => 
+                setComponents(prev => prev.map(c =>
                     c.id === dragging.id ? { ...c, x: x + dragging.offset.x, y: y + dragging.offset.y } : c
                 ));
             };
 
             const endDragging = () => {
+                if (pinchRef.current) { pinchRef.current = null; return; }
                 if (!dragging) return;
                 setComponents(prev => prev.map(c => {
                     if (c.id !== dragging.id) return c;
@@ -263,6 +312,27 @@
                 });
             }, [components, images, gearStates, selectedId]);
 
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                const onWheel = (e) => {
+                    e.preventDefault();
+                    const factor = e.deltaY < 0 ? 1.1 : 1/1.1;
+                    const rect = canvas.getBoundingClientRect();
+                    const anchorCX = (e.clientX - rect.left) * (CANVAS_W / rect.width);
+                    const anchorCY = (e.clientY - rect.top)  * (CANVAS_H / rect.height);
+                    setCanvasView(prev => {
+                        const newScale = Math.min(3, Math.max(0.2, prev.scale * factor));
+                        return {
+                            scale: newScale,
+                            x: e.clientX - rect.left + prev.x - anchorCX * newScale,
+                            y: e.clientY - rect.top  + prev.y - anchorCY * newScale,
+                        };
+                    });
+                };
+                canvas.addEventListener('wheel', onWheel, { passive: false });
+                return () => canvas.removeEventListener('wheel', onWheel);
+            }, []);
+
             const activeImg = useMemo(() => images.find(img => img.id === selectedImgId), [images, selectedImgId]);
 
             return (
@@ -278,8 +348,15 @@
                     </header>
 
                     <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
-                        <aside className="w-full md:w-80 bg-white border-b md:border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0 order-2 md:order-1 h-1/3 md:h-auto overflow-hidden">
-                            <div className="flex border-b border-slate-200 bg-slate-50 p-1">
+                        <aside className="w-full md:w-80 bg-white border-b md:border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0 order-2 md:order-1 h-2/5 md:h-full overflow-hidden">
+                            <div className="p-3 bg-slate-50 border-b border-slate-200 flex-shrink-0">
+                                <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
+                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg flex-shrink-0 ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}><Icon name={isPlaying ? "Square" : "Play"} size={20} /></button>
+                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0"><Icon name="RotateCcw" size={18} /></button>
+                                    <div className="flex-1 border-l pl-3"><div className={`text-[10px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div></div>
+                                </div>
+                            </div>
+                            <div className="flex border-b border-slate-200 bg-slate-50 p-1 flex-shrink-0">
                                 {['upload', 'design'].map(tab => (
                                     <button key={tab} onClick={() => setActiveTab(tab)}
                                         className={`flex-1 py-3 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -346,30 +423,23 @@
                                 )}
                             </div>
 
-                            <div className="p-4 bg-slate-50 border-t border-slate-200">
-                                <div className="flex items-center gap-4 bg-white p-2 md:p-3 rounded-2xl border border-slate-200 shadow-sm">
-                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white shadow-lg ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}><Icon name={isPlaying ? "Square" : "Play"} size={20} /></button>
-                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center"><Icon name="RotateCcw" size={18} /></button>
-                                    <div className="flex-1 border-l pl-4"><div className={`text-[10px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div></div>
-                                </div>
-                            </div>
                         </aside>
 
-                        <main className="flex-1 p-4 md:p-12 overflow-auto flex items-start justify-center bg-slate-300 order-1 md:order-2">
-                            <div className="bg-white rounded-xl shadow-2xl relative border-[8px] md:border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H }}>
-                                <canvas 
-                                    ref={canvasRef} 
-                                    width={CANVAS_W} 
-                                    height={CANVAS_H} 
-                                    onMouseDown={startDragging} 
-                                    onMouseMove={onMove} 
-                                    onMouseUp={endDragging} 
+                        <main ref={mainRef} className="flex-1 p-2 md:p-8 overflow-hidden flex items-center justify-center bg-slate-300 order-1 md:order-2">
+                            <div className="bg-white rounded-xl shadow-2xl relative border-[8px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H, transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.scale})`, transformOrigin: '0 0' }}>
+                                <canvas
+                                    ref={canvasRef}
+                                    width={CANVAS_W}
+                                    height={CANVAS_H}
+                                    onMouseDown={startDragging}
+                                    onMouseMove={onMove}
+                                    onMouseUp={endDragging}
                                     onMouseLeave={endDragging}
                                     onTouchStart={startDragging}
                                     onTouchMove={onMove}
                                     onTouchEnd={endDragging}
                                 />
-                                <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-white/60 backdrop-blur px-2 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">350x300mm | 26x25 Holes</div>
+                                <div className="absolute top-2 right-2 bg-white/60 backdrop-blur px-2 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">350x300mm | 26x25 Holes</div>
                             </div>
                         </main>
                     </div>
