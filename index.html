@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>會動的風景畫：齒輪機構設計助手</title>
-    <script src="<https://cdn.tailwindcss.com>"></script>
-    <script src="<https://unpkg.com/react@18/umd/react.production.min.js>"></script>
-    <script src="<https://unpkg.com/react-dom@18/umd/react-dom.production.min.js>"></script>
-    <script src="<https://unpkg.com/@babel/standalone/babel.min.js>"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { font-family: sans-serif; -webkit-user-select: none; user-select: none; margin: 0; background-color: #f1f5f9; overflow: hidden; }
         canvas { touch-action: none; cursor: crosshair; background-color: #ffffff; display: block; border-radius: 8px; }
@@ -16,6 +18,7 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
         @keyframes pulse-highlight {
             0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
             70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
@@ -23,13 +26,19 @@
         }
         .selected-ui { animation: pulse-highlight 2s infinite; border-color: #3b82f6 !important; }
         .gear-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        @media (max-width: 767px) {
+        .controls-footer { padding-bottom: max(80px, env(safe-area-inset-bottom)); }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
+
     <script type="text/babel">
         const { useState, useRef, useEffect, useMemo, useCallback } = React;
 
+        // 穩定版 Icon 組件：直接使用內建 SVG，避免外部庫報錯
         const Icon = ({ name, size = 20, className = "" }) => {
             const paths = {
                 Layout: <path d="M3 3h7v7H3zm11 0h7v7h-7zm0 11h7v7h-7zM3 14h7v7H3z" />,
@@ -47,31 +56,33 @@
         };
 
         const App = () => {
-            const SCALE = 2.5;
-            const BOARD_W_MM = 350;
-            const BOARD_H_MM = 300;
-            const GRID_MM = 12;
-            const COLS = 26;
-            const ROWS = 25;
-            const CANVAS_W = BOARD_W_MM * SCALE;
-            const CANVAS_H = BOARD_H_MM * SCALE;
+            // --- 物理規格設定 ---
+            const SCALE = 2.5; 
+            const BOARD_W_MM = 350; 
+            const BOARD_H_MM = 300; 
+            const GRID_MM = 12;     
+            const COLS = 26;        
+            const ROWS = 25;        
+            const CANVAS_W = BOARD_W_MM * SCALE; 
+            const CANVAS_H = BOARD_H_MM * SCALE; 
             const DX = GRID_MM * SCALE;
-            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE;
+            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE; 
             const GRID_TOTAL_W = (COLS - 1) * DX + (DX / 2);
             const GRID_TOTAL_H = (ROWS - 1) * DY;
             const OFFSET_X = (CANVAS_W - GRID_TOTAL_W) / 2;
             const OFFSET_Y = (CANVAS_H - GRID_TOTAL_H) / 2;
 
+            // 更新後的尺寸與顏色
             const GEAR_COLORS = {
                 12: { hex: '#4ade80', name: '翠綠' },
                 18: { hex: '#fb923c', name: '亮橘' },
                 24: { hex: '#fbbf24', name: '金黃' },
-                30: { hex: '#22d3ee', name: '青藍' },
+                30: { hex: '#22d3ee', name: '青藍' }, // 新增尺寸 R30
                 36: { hex: '#a855f7', name: '紫羅蘭' },
                 48: { hex: '#6366f1', name: '靛藍' }
             };
 
-            const [images, setImages] = useState([]);
+            const [images, setImages] = useState([]); 
             const [selectedImgId, setSelectedImgId] = useState(null);
             const [isPlaying, setIsPlaying] = useState(false);
             const [activeTab, setActiveTab] = useState('upload');
@@ -79,12 +90,12 @@
             const [selectedId, setSelectedId] = useState(null);
             const [time, setTime] = useState(0);
             const [dragging, setDragging] = useState(null);
-            const [canvasView, setCanvasView] = useState({ scale: 1, x: 0, y: 0 });
 
             const canvasRef = useRef(null);
             const requestRef = useRef();
+            const [canvasView, setCanvasView] = useState({ scale: 1, x: 0, y: 0 });
             const pinchRef = useRef(null);
-            const mainRef = useRef(null);
+            const mainRef  = useRef(null);
 
             useEffect(() => {
                 const animate = () => {
@@ -116,13 +127,13 @@
                     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
                     const rect = canvas.getBoundingClientRect();
                     const anchorCX = (e.clientX - rect.left) * (CANVAS_W / rect.width);
-                    const anchorCY = (e.clientY - rect.top) * (CANVAS_H / rect.height);
+                    const anchorCY = (e.clientY - rect.top)  * (CANVAS_H / rect.height);
                     setCanvasView(prev => {
                         const newScale = Math.min(3, Math.max(0.2, prev.scale * factor));
                         return {
                             scale: newScale,
                             x: e.clientX - rect.left + prev.x - anchorCX * newScale,
-                            y: e.clientY - rect.top + prev.y - anchorCY * newScale,
+                            y: e.clientY - rect.top  + prev.y - anchorCY * newScale,
                         };
                     });
                 };
@@ -141,7 +152,7 @@
 
             const removeComponent = useCallback((idToRemove) => {
                 setComponents(prev => {
-                    const next = prev.filter(c => <c.id> !== idToRemove);
+                    const next = prev.filter(c => c.id !== idToRemove);
                     if (next.length > 0 && !next.some(c => c.isInput)) {
                         const firstGear = next.find(c => c.type === 'gear');
                         if (firstGear) firstGear.isInput = true;
@@ -177,10 +188,10 @@
                 });
             };
 
-            const updateImage = (id, params) => setImages(prev => prev.map(img => <img.id> === id ? { ...img, ...params } : img));
-            const removeImage = (id) => {
-                setImages(prev => prev.filter(img => <img.id> !== id));
-                if (selectedImgId === id) setSelectedImgId(null);
+            const updateImage = (id, params) => setImages(prev => prev.map(img => img.id === id ? { ...img, ...params } : img));
+            const removeImage = (id) => { 
+                setImages(prev => prev.filter(img => img.id !== id)); 
+                if(selectedImgId === id) setSelectedImgId(null);
             };
 
             const addGear = (teeth = 12) => {
@@ -197,19 +208,19 @@
                 const states = {};
                 const inputGear = components.find(c => c.isInput);
                 if (!inputGear) return states;
-                states[<inputGear.id>] = { rotation: time, active: true };
+                states[inputGear.id] = { rotation: time, active: true };
                 const queue = [inputGear];
-                const visited = new Set([<inputGear.id>]);
+                const visited = new Set([inputGear.id]);
                 while (queue.length > 0) {
                     const curr = queue.shift();
-                    const currRot = states[<curr.id>].rotation;
+                    const currRot = states[curr.id].rotation;
                     components.forEach(other => {
-                        if (!visited.has(<other.id>)) {
+                        if (!visited.has(other.id)) {
                             const d = Math.hypot(curr.x - other.x, curr.y - other.y);
                             const meshD = (curr.teeth + other.teeth) * SCALE;
                             if (Math.abs(d - meshD) < 8) {
-                                states[<other.id>] = { rotation: -currRot * (curr.teeth / other.teeth), active: true };
-                                visited.add(<other.id>); queue.push(other);
+                                states[other.id] = { rotation: -currRot * (curr.teeth / other.teeth), active: true };
+                                visited.add(other.id); queue.push(other);
                             }
                         }
                     });
@@ -217,6 +228,7 @@
                 return states;
             }, [components, time]);
 
+            // --- 統一的座標處理器，支援滑鼠與觸控 ---
             const getCoordinates = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -247,8 +259,8 @@
                 const { x, y } = getCoordinates(e);
                 for (const c of [...components].reverse()) {
                     if (Math.hypot(c.x - x, c.y - y) < c.teeth * SCALE + 15) {
-                        setDragging({ id: <c.id>, offset: { x: c.x - x, y: c.y - y } });
-                        setSelectedId(<c.id>); return;
+                        setDragging({ id: c.id, offset: { x: c.x - x, y: c.y - y } });
+                        setSelectedId(c.id); return;
                     }
                 }
                 setSelectedId(null);
@@ -264,18 +276,18 @@
                             rectLeft, rectTop, rectWidth, rectHeight } = pinchRef.current;
                     const newScale = Math.min(3, Math.max(0.2, startScale * (dist / startDist)));
                     const anchorCX = (startMidX - rectLeft) * (CANVAS_W / rectWidth);
-                    const anchorCY = (startMidY - rectTop) * (CANVAS_H / rectHeight);
+                    const anchorCY = (startMidY - rectTop)  * (CANVAS_H / rectHeight);
                     setCanvasView({
                         scale: newScale,
                         x: midX - rectLeft + startView.x - anchorCX * newScale,
-                        y: midY - rectTop + startView.y - anchorCY * newScale,
+                        y: midY - rectTop  + startView.y - anchorCY * newScale,
                     });
                     return;
                 }
                 if (!dragging) return;
                 const { x, y } = getCoordinates(e);
                 setComponents(prev => prev.map(c =>
-                    <c.id> === <dragging.id> ? { ...c, x: x + dragging.offset.x, y: y + dragging.offset.y } : c
+                    c.id === dragging.id ? { ...c, x: x + dragging.offset.x, y: y + dragging.offset.y } : c
                 ));
             };
 
@@ -283,7 +295,7 @@
                 if (pinchRef.current) { pinchRef.current = null; return; }
                 if (!dragging) return;
                 setComponents(prev => prev.map(c => {
-                    if (<c.id> !== <dragging.id>) return c;
+                    if (c.id !== dragging.id) return c;
                     const { sx, sy } = snapToTriangle(c.x, c.y);
                     return { ...c, x: sx, y: sy };
                 }));
@@ -310,14 +322,14 @@
                     }
                 }
                 components.forEach(c => {
-                    const s = gearStates[<c.id>] || { rotation: 0, active: false };
+                    const s = gearStates[c.id] || { rotation: 0, active: false };
                     const r = c.teeth * SCALE;
                     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(s.rotation);
                     ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
-                    ctx.strokeStyle = s.active ? '#3b82f6' : (<c.id> === selectedId ? '#ef4444' : '#475569');
-                    ctx.lineWidth = s.active || <c.id> === selectedId ? 4 : 2;
-                    ctx.stroke(); ctx.fillStyle = c.color + (<c.id> === selectedId ? 'BB' : '88'); ctx.fill();
-                    for (let i = 0; i < c.teeth; i++) {
+                    ctx.strokeStyle = s.active ? '#3b82f6' : (c.id === selectedId ? '#ef4444' : '#475569');
+                    ctx.lineWidth = s.active || c.id === selectedId ? 4 : 2;
+                    ctx.stroke(); ctx.fillStyle = c.color + (c.id === selectedId ? 'BB' : '88'); ctx.fill();
+                    for(let i=0; i<c.teeth; i++) {
                         ctx.rotate((Math.PI * 2) / c.teeth); ctx.fillStyle = '#475569'; ctx.fillRect(r - 2, -2, 6, 4);
                     }
                     ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
@@ -327,7 +339,7 @@
                 });
             }, [components, images, gearStates, selectedId]);
 
-            const activeImg = useMemo(() => images.find(img => <img.id> === selectedImgId), [images, selectedImgId]);
+            const activeImg = useMemo(() => images.find(img => img.id === selectedImgId), [images, selectedImgId]);
 
             return (
                 <div className="flex flex-col h-screen text-slate-900 overflow-hidden bg-slate-200 font-sans">
@@ -335,54 +347,39 @@
                         <div className="flex items-center gap-3">
                             <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
                             <div>
-                                <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>
+                                <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>            
                             </div>
                         </div>
                     </header>
 
                     <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
-                        <aside className="w-full md:w-80 bg-white border-b md:border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0 order-2 md:order-1 min-h-[200px] h-2/5 md:h-full overflow-hidden">
-
-                            <div className="p-3 bg-slate-50 border-b border-slate-200 flex-shrink-0">
-                                <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
-                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg flex-shrink-0 ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}>
-                                        <Icon name={isPlaying ? "Square" : "Play"} size={20} />
-                                    </button>
-                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0">
-                                        <Icon name="RotateCcw" size={18} />
-                                    </button>
-                                    <div className="flex-1 border-l pl-3">
-                                        <div className={`text-[10px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex border-b border-slate-200 bg-slate-50 p-1 flex-shrink-0">
+                        <aside className="w-full md:w-80 bg-white border-b md:border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0 order-2 md:order-1 min-h-[220px] h-2/5 md:h-full overflow-hidden">
+                            <div className="flex border-b border-slate-200 bg-slate-50 p-1">
                                 {['upload', 'design'].map(tab => (
                                     <button key={tab} onClick={() => setActiveTab(tab)}
-                                        className={`flex-1 py-2 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                                        className={`flex-1 py-3 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
                                         {tab === 'upload' ? '1. 畫作管理' : '2. 放置零件'}
                                     </button>
                                 ))}
                             </div>
-
-                            <div className="flex-1 overflow-y-auto p-3 md:p-4 space-y-3">
+                            
+                            <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4">
                                 {activeTab === 'upload' && (
-                                    <div className="space-y-3 text-slate-600">
+                                    <div className="space-y-4 text-slate-600">
                                         <div className="p-4 border-2 border-dashed border-slate-200 rounded-2xl text-center bg-slate-50 relative group cursor-pointer hover:border-blue-400 transition-all">
                                             <input type="file" multiple className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleImageUpload} />
                                             <Icon name="PlusCircle" size={32} className="mx-auto mb-2 text-slate-300 group-hover:text-blue-500 transition-colors" />
                                             <p className="text-xs font-bold">上傳圖片圖層</p>
                                         </div>
                                         {images.map(img => (
-                                            <div key={<img.id>} onClick={() => setSelectedImgId(<img.id>)} className={`p-2 rounded-xl border flex items-center gap-3 cursor-pointer ${selectedImgId === <img.id> ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 bg-white'}`}>
+                                            <div key={img.id} onClick={() => setSelectedImgId(img.id)} className={`p-2 rounded-xl border flex items-center gap-3 cursor-pointer ${selectedImgId === img.id ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-slate-100 bg-white'}`}>
                                                 <div className="w-8 h-8 bg-slate-100 rounded-lg overflow-hidden border"><img src={img.obj.src} className="w-full h-full object-cover" /></div>
                                                 <span className="flex-1 text-[10px] font-bold truncate">{img.name}</span>
-                                                <button onClick={() => removeImage(<img.id>)} className="text-slate-300 hover:text-red-500"><Icon name="Trash2" size={16} /></button>
+                                                <button onClick={() => removeImage(img.id)} className="text-slate-300 hover:text-red-500"><Icon name="Trash2" size={16} /></button>
                                             </div>
                                         ))}
                                         {activeImg && (
-                                            <div className="space-y-3 bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-inner mt-3">
+                                            <div className="space-y-3 bg-slate-50 p-3 rounded-2xl border border-slate-100 shadow-inner mt-4">
                                                 <h4 className="text-[10px] font-black text-blue-600 uppercase border-b border-blue-100 pb-1 mb-2">圖層調整</h4>
                                                 {['opacity', 'scale', 'x', 'y'].map(k => (
                                                     <div key={k} className="space-y-1">
@@ -395,13 +392,16 @@
                                     </div>
                                 )}
                                 {activeTab === 'design' && (
-                                    <div className="space-y-3">
+                                    <div className="space-y-4">
                                         <h3 className="text-[10px] font-black uppercase tracking-widest text-center text-slate-400">新增齒輪 (模數 2.0)</h3>
                                         <div className="grid grid-cols-2 gap-2">
                                             {[12, 18, 24, 30, 36, 48].map(size => (
-                                                <button key={size} onClick={() => addGear(size)}
+                                                <button key={size} onClick={() => addGear(size)} 
                                                     className="gear-btn p-3 border-2 rounded-2xl flex flex-col items-center gap-1 group shadow-sm bg-white"
-                                                    style={{ borderColor: GEAR_COLORS[size].hex + '40', color: GEAR_COLORS[size].hex }}
+                                                    style={{ 
+                                                        borderColor: GEAR_COLORS[size].hex + '40', 
+                                                        color: GEAR_COLORS[size].hex 
+                                                    }}
                                                 >
                                                     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GEAR_COLORS[size].hex }}></div>
                                                     <span className="text-[10px] font-black uppercase tracking-tighter">R{size} 齒輪</span>
@@ -409,16 +409,24 @@
                                             ))}
                                         </div>
                                         {selectedId && (
-                                            <div className="p-4 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-slate-700 selected-ui mt-3">
+                                            <div className="p-4 bg-slate-900 text-white rounded-3xl shadow-xl border-4 border-slate-700 selected-ui mt-4">
                                                 <div className="flex justify-between items-center mb-3">
                                                     <span className="text-[10px] font-black uppercase text-blue-400 tracking-tighter">零件編輯</span>
                                                     <button onClick={() => removeComponent(selectedId)} className="text-red-400 p-1 hover:bg-red-500/20 rounded-lg"><Icon name="Trash2" size={20} /></button>
                                                 </div>
-                                                <button onClick={() => setComponents(prev => prev.map(c => ({ ...c, isInput: <c.id> === selectedId ? true : (c.isInput ? false : c.isInput) })))} className={`w-full py-3 rounded-xl text-[10px] font-black transition-all ${components.find(c => <c.id> === selectedId).isInput ? 'bg-blue-600 shadow-lg text-white' : 'bg-slate-800 text-slate-400'}`}>設為動力主動輪</button>
+                                                <button onClick={() => setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId ? true : (c.isInput ? false : c.isInput) })))} className={`w-full py-3 rounded-xl text-[10px] font-black transition-all ${components.find(c => c.id === selectedId).isInput ? 'bg-blue-600 shadow-lg text-white' : 'bg-slate-800 text-slate-400'}`}>設為動力主動輪</button>
                                             </div>
                                         )}
                                     </div>
                                 )}
+                            </div>
+
+                            <div className="controls-footer p-4 bg-slate-50 border-t border-slate-200">
+                                <div className="flex items-center gap-4 bg-white p-2 md:p-3 rounded-2xl border border-slate-200 shadow-sm">
+                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white shadow-lg ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}><Icon name={isPlaying ? "Square" : "Play"} size={20} /></button>
+                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center"><Icon name="RotateCcw" size={18} /></button>
+                                    <div className="flex-1 border-l pl-4"><div className={`text-[10px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div></div>
+                                </div>
                             </div>
                         </aside>
 
