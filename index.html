@@ -18,7 +18,7 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        
+
         @keyframes pulse-highlight {
             0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
             70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
@@ -57,16 +57,16 @@
 
         const App = () => {
             // --- 物理規格設定 ---
-            const SCALE = 2.5; 
-            const BOARD_W_MM = 350; 
-            const BOARD_H_MM = 300; 
-            const GRID_MM = 12;     
-            const COLS = 26;        
-            const ROWS = 25;        
-            const CANVAS_W = BOARD_W_MM * SCALE; 
-            const CANVAS_H = BOARD_H_MM * SCALE; 
+            const SCALE = 2.5;
+            const BOARD_W_MM = 350;
+            const BOARD_H_MM = 300;
+            const GRID_MM = 12;
+            const COLS = 26;
+            const ROWS = 25;
+            const CANVAS_W = BOARD_W_MM * SCALE;
+            const CANVAS_H = BOARD_H_MM * SCALE;
             const DX = GRID_MM * SCALE;
-            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE; 
+            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE;
             const GRID_TOTAL_W = (COLS - 1) * DX + (DX / 2);
             const GRID_TOTAL_H = (ROWS - 1) * DY;
             const OFFSET_X = (CANVAS_W - GRID_TOTAL_W) / 2;
@@ -77,12 +77,12 @@
                 12: { hex: '#4ade80', name: '翠綠' },
                 18: { hex: '#fb923c', name: '亮橘' },
                 24: { hex: '#fbbf24', name: '金黃' },
-                30: { hex: '#22d3ee', name: '青藍' }, // 新增尺寸 R30
+                30: { hex: '#22d3ee', name: '青藍' },
                 36: { hex: '#a855f7', name: '紫羅蘭' },
                 48: { hex: '#6366f1', name: '靛藍' }
             };
 
-            const [images, setImages] = useState([]); 
+            const [images, setImages] = useState([]);
             const [selectedImgId, setSelectedImgId] = useState(null);
             const [isPlaying, setIsPlaying] = useState(false);
             const [activeTab, setActiveTab] = useState('upload');
@@ -189,8 +189,8 @@
             };
 
             const updateImage = (id, params) => setImages(prev => prev.map(img => img.id === id ? { ...img, ...params } : img));
-            const removeImage = (id) => { 
-                setImages(prev => prev.filter(img => img.id !== id)); 
+            const removeImage = (id) => {
+                setImages(prev => prev.filter(img => img.id !== id));
                 if(selectedImgId === id) setSelectedImgId(null);
             };
 
@@ -263,7 +263,30 @@
                         setSelectedId(c.id); return;
                     }
                 }
-                setSelectedId(null);
+                // 點擊空白區域：桌面版啟動平移，觸控版取消選取
+                if (!e.touches) {
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const startView = { ...canvasView };
+                    let moved = false;
+                    const onPanMove = (me) => {
+                        moved = true;
+                        setCanvasView({
+                            scale: startView.scale,
+                            x: startView.x + me.clientX - startX,
+                            y: startView.y + me.clientY - startY,
+                        });
+                    };
+                    const onPanUp = () => {
+                        window.removeEventListener('mousemove', onPanMove);
+                        window.removeEventListener('mouseup', onPanUp);
+                        if (!moved) setSelectedId(null);
+                    };
+                    window.addEventListener('mousemove', onPanMove);
+                    window.addEventListener('mouseup', onPanUp);
+                } else {
+                    setSelectedId(null);
+                }
             };
 
             const onMove = (e) => {
@@ -334,7 +357,6 @@
                     }
                     ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
                     ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
-                    if (c.isInput) { ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke(); }
                     ctx.restore();
                 });
             }, [components, images, gearStates, selectedId]);
@@ -347,7 +369,7 @@
                         <div className="flex items-center gap-3">
                             <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
                             <div>
-                                <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>            
+                                <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>
                             </div>
                         </div>
                     </header>
@@ -362,7 +384,7 @@
                                     </button>
                                 ))}
                             </div>
-                            
+
                             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4">
                                 {activeTab === 'upload' && (
                                     <div className="space-y-4 text-slate-600">
@@ -396,11 +418,11 @@
                                         <h3 className="text-[10px] font-black uppercase tracking-widest text-center text-slate-400">新增齒輪 (模數 2.0)</h3>
                                         <div className="grid grid-cols-2 gap-2">
                                             {[12, 18, 24, 30, 36, 48].map(size => (
-                                                <button key={size} onClick={() => addGear(size)} 
+                                                <button key={size} onClick={() => addGear(size)}
                                                     className="gear-btn p-3 border-2 rounded-2xl flex flex-col items-center gap-1 group shadow-sm bg-white"
-                                                    style={{ 
-                                                        borderColor: GEAR_COLORS[size].hex + '40', 
-                                                        color: GEAR_COLORS[size].hex 
+                                                    style={{
+                                                        borderColor: GEAR_COLORS[size].hex + '40',
+                                                        color: GEAR_COLORS[size].hex
                                                     }}
                                                 >
                                                     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GEAR_COLORS[size].hex }}></div>
