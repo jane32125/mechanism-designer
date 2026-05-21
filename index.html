@@ -423,6 +423,31 @@
                                                 <button onClick={() => setComponents(prev => prev.map(c => ({ ...c, isInput: c.id === selectedId ? true : (c.isInput ? false : c.isInput) })))} className={`w-full py-3 rounded-xl text-[10px] font-black transition-all ${components.find(c => c.id === selectedId).isInput ? 'bg-blue-600 shadow-lg text-white' : 'bg-slate-800 text-slate-400'}`}>設為動力主動輪</button>
                                             </div>
                                         )}
+                                        {components.length > 0 && (() => {
+                                            const FIX_ROW = ROWS - 4, FIX_COL = COLS - 5;
+                                            return (
+                                                <div className="mt-4 space-y-2">
+                                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-center text-slate-400">齒輪位置（相對紅點）</h3>
+                                                    {components.map(c => {
+                                                        const row = Math.round((c.y - OFFSET_Y) / DY);
+                                                        const rowShift = (row % 2 === 0) ? 0 : DX / 2;
+                                                        const col = Math.round((c.x - OFFSET_X - rowShift) / DX);
+                                                        const dRow = FIX_ROW - row;
+                                                        const dCol = col - FIX_COL;
+                                                        const rowTxt = dRow > 0 ? `上${dRow}行` : dRow < 0 ? `下${-dRow}行` : '';
+                                                        const colTxt = dCol > 0 ? `右${dCol}格` : dCol < 0 ? `左${-dCol}格` : '';
+                                                        const pos = rowTxt && colTxt ? `${rowTxt}、${colTxt}` : rowTxt || colTxt || '紅點位置';
+                                                        return (
+                                                            <div key={c.id} className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 border border-slate-100">
+                                                                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }}></div>
+                                                                <span className="text-[10px] font-black text-slate-600">R{c.teeth}{c.isInput ? ' ★' : ''}</span>
+                                                                <span className="text-[10px] text-slate-400 ml-auto">{pos}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 )}
                             </div>
