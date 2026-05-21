@@ -326,15 +326,14 @@
                     const r = c.teeth * SCALE;
                     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(s.rotation);
                     ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
-                    ctx.strokeStyle = s.active ? '#3b82f6' : (c.id === selectedId ? '#ef4444' : '#475569');
-                    ctx.lineWidth = s.active || c.id === selectedId ? 4 : 2;
+                    ctx.strokeStyle = s.active ? '#3b82f6' : (c.id === selectedId || c.isInput ? '#ef4444' : '#475569');
+                    ctx.lineWidth = s.active || c.id === selectedId || c.isInput ? 4 : 2;
                     ctx.stroke(); ctx.fillStyle = c.color + (c.id === selectedId ? 'BB' : '88'); ctx.fill();
                     for(let i=0; i<c.teeth; i++) {
                         ctx.rotate((Math.PI * 2) / c.teeth); ctx.fillStyle = '#475569'; ctx.fillRect(r - 2, -2, 6, 4);
                     }
                     ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
                     ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
-                    if (c.isInput) { ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke(); }
                     ctx.restore();
                 });
             }, [components, images, gearStates, selectedId]);
