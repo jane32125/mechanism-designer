@@ -313,17 +313,11 @@
                     ctx.drawImage(imgData.obj, imgData.x, imgData.y, drawW, drawH);
                     ctx.restore();
                 });
-                const inputGear = components.find(c => c.isInput);
-                let redX, redY;
-                if (inputGear) {
-                    redX = inputGear.x; redY = inputGear.y;
-                } else {
-                    const defR = Math.max(0, Math.min(ROWS - 1, Math.round((CANVAS_H / 2 - OFFSET_Y) / DY)));
-                    redY = OFFSET_Y + defR * DY;
-                    const defShift = (defR % 2 === 0) ? 0 : DX / 2;
-                    const defC = Math.max(0, Math.min(COLS - 1, Math.round((CANVAS_W / 2 - OFFSET_X - defShift) / DX)));
-                    redX = OFFSET_X + defC * DX + defShift;
-                }
+                const fixedRow = ROWS - 4;
+                const fixedCol = COLS - 5;
+                const fixedShift = (fixedRow % 2 === 0) ? 0 : DX / 2;
+                const redX = OFFSET_X + fixedCol * DX + fixedShift;
+                const redY = OFFSET_Y + fixedRow * DY;
                 for (let r = 0; r < ROWS; r++) {
                     const y = OFFSET_Y + r * DY;
                     const rowShift = (r % 2 === 0) ? 0 : DX / 2;
