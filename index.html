@@ -314,14 +314,24 @@
                     ctx.restore();
                 });
                 const inputGear = components.find(c => c.isInput);
+                let redX, redY;
+                if (inputGear) {
+                    redX = inputGear.x; redY = inputGear.y;
+                } else {
+                    const defR = Math.max(0, Math.min(ROWS - 1, Math.round((CANVAS_H / 2 - OFFSET_Y) / DY)));
+                    redY = OFFSET_Y + defR * DY;
+                    const defShift = (defR % 2 === 0) ? 0 : DX / 2;
+                    const defC = Math.max(0, Math.min(COLS - 1, Math.round((CANVAS_W / 2 - OFFSET_X - defShift) / DX)));
+                    redX = OFFSET_X + defC * DX + defShift;
+                }
                 for (let r = 0; r < ROWS; r++) {
                     const y = OFFSET_Y + r * DY;
                     const rowShift = (r % 2 === 0) ? 0 : DX / 2;
                     for (let c = 0; c < COLS; c++) {
                         const dotX = OFFSET_X + c * DX + rowShift;
-                        const isInput = inputGear && Math.abs(dotX - inputGear.x) < 1 && Math.abs(y - inputGear.y) < 1;
-                        ctx.beginPath(); ctx.arc(dotX, y, isInput ? 5 : 2.2, 0, Math.PI * 2);
-                        ctx.fillStyle = isInput ? '#ef4444' : '#cbd5e1'; ctx.fill();
+                        const isRed = Math.abs(dotX - redX) < 2 && Math.abs(y - redY) < 2;
+                        ctx.beginPath(); ctx.arc(dotX, y, isRed ? 5 : 2.2, 0, Math.PI * 2);
+                        ctx.fillStyle = isRed ? '#ef4444' : '#cbd5e1'; ctx.fill();
                     }
                 }
                 components.forEach(c => {
