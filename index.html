@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>會動的風景畫：齒輪機構設計助手</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,7 +18,7 @@
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        
+
         @keyframes pulse-highlight {
             0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
             70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
@@ -26,6 +26,10 @@
         }
         .selected-ui { animation: pulse-highlight 2s infinite; border-color: #3b82f6 !important; }
         .gear-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        @media (max-width: 767px) {
+        .controls-footer { padding-bottom: max(80px, env(safe-area-inset-bottom)); }
+        }
     </style>
 </head>
 <body>
@@ -53,16 +57,16 @@
 
         const App = () => {
             // --- 物理規格設定 ---
-            const SCALE = 2.5; 
-            const BOARD_W_MM = 350; 
-            const BOARD_H_MM = 300; 
-            const GRID_MM = 12;     
-            const COLS = 26;        
-            const ROWS = 25;        
-            const CANVAS_W = BOARD_W_MM * SCALE; 
-            const CANVAS_H = BOARD_H_MM * SCALE; 
+            const SCALE = 2.5;
+            const BOARD_W_MM = 350;
+            const BOARD_H_MM = 300;
+            const GRID_MM = 12;
+            const COLS = 26;
+            const ROWS = 25;
+            const CANVAS_W = BOARD_W_MM * SCALE;
+            const CANVAS_H = BOARD_H_MM * SCALE;
             const DX = GRID_MM * SCALE;
-            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE; 
+            const DY = GRID_MM * Math.sin(Math.PI / 3) * SCALE;
             const GRID_TOTAL_W = (COLS - 1) * DX + (DX / 2);
             const GRID_TOTAL_H = (ROWS - 1) * DY;
             const OFFSET_X = (CANVAS_W - GRID_TOTAL_W) / 2;
@@ -73,12 +77,12 @@
                 12: { hex: '#4ade80', name: '翠綠' },
                 18: { hex: '#fb923c', name: '亮橘' },
                 24: { hex: '#fbbf24', name: '金黃' },
-                30: { hex: '#22d3ee', name: '青藍' }, // 新增尺寸 R30
+                30: { hex: '#22d3ee', name: '青藍' },
                 36: { hex: '#a855f7', name: '紫羅蘭' },
                 48: { hex: '#6366f1', name: '靛藍' }
             };
 
-            const [images, setImages] = useState([]); 
+            const [images, setImages] = useState([]);
             const [selectedImgId, setSelectedImgId] = useState(null);
             const [isPlaying, setIsPlaying] = useState(false);
             const [activeTab, setActiveTab] = useState('upload');
@@ -91,7 +95,7 @@
             const requestRef = useRef();
             const [canvasView, setCanvasView] = useState({ scale: 1, x: 0, y: 0 });
             const pinchRef = useRef(null);
-            const mainRef = useRef(null);
+            const mainRef  = useRef(null);
 
             useEffect(() => {
                 const animate = () => {
@@ -108,12 +112,33 @@
                     const mainW = mainRef.current.clientWidth;
                     const mainH = mainRef.current.clientHeight;
                     const pad = 16;
-                    const s = Math.min(1, (mainW - 2*pad) / CANVAS_W, (mainH - 2*pad) / CANVAS_H);
-                    setCanvasView({ scale: s, x: CANVAS_W*(1-s)/2, y: CANVAS_H*(1-s)/2 });
+                    const s = Math.min(1, (mainW - 2 * pad) / CANVAS_W, (mainH - 2 * pad) / CANVAS_H);
+                    setCanvasView({ scale: s, x: CANVAS_W * (1 - s) / 2, y: CANVAS_H * (1 - s) / 2 });
                 };
                 fit();
                 window.addEventListener('resize', fit);
                 return () => window.removeEventListener('resize', fit);
+            }, []);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                const onWheel = (e) => {
+                    e.preventDefault();
+                    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+                    const rect = canvas.getBoundingClientRect();
+                    const anchorCX = (e.clientX - rect.left) * (CANVAS_W / rect.width);
+                    const anchorCY = (e.clientY - rect.top)  * (CANVAS_H / rect.height);
+                    setCanvasView(prev => {
+                        const newScale = Math.min(3, Math.max(0.2, prev.scale * factor));
+                        return {
+                            scale: newScale,
+                            x: e.clientX - rect.left + prev.x - anchorCX * newScale,
+                            y: e.clientY - rect.top  + prev.y - anchorCY * newScale,
+                        };
+                    });
+                };
+                canvas.addEventListener('wheel', onWheel, { passive: false });
+                return () => canvas.removeEventListener('wheel', onWheel);
             }, []);
 
             const snapToTriangle = (x, y) => {
@@ -164,8 +189,8 @@
             };
 
             const updateImage = (id, params) => setImages(prev => prev.map(img => img.id === id ? { ...img, ...params } : img));
-            const removeImage = (id) => { 
-                setImages(prev => prev.filter(img => img.id !== id)); 
+            const removeImage = (id) => {
+                setImages(prev => prev.filter(img => img.id !== id));
                 if(selectedImgId === id) setSelectedImgId(null);
             };
 
@@ -238,7 +263,30 @@
                         setSelectedId(c.id); return;
                     }
                 }
-                setSelectedId(null);
+                // 點擊空白區域：桌面版啟動平移，觸控版取消選取
+                if (!e.touches) {
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const startView = { ...canvasView };
+                    let moved = false;
+                    const onPanMove = (me) => {
+                        moved = true;
+                        setCanvasView({
+                            scale: startView.scale,
+                            x: startView.x + me.clientX - startX,
+                            y: startView.y + me.clientY - startY,
+                        });
+                    };
+                    const onPanUp = () => {
+                        window.removeEventListener('mousemove', onPanMove);
+                        window.removeEventListener('mouseup', onPanUp);
+                        if (!moved) setSelectedId(null);
+                    };
+                    window.addEventListener('mousemove', onPanMove);
+                    window.addEventListener('mouseup', onPanUp);
+                } else {
+                    setSelectedId(null);
+                }
             };
 
             const onMove = (e) => {
@@ -252,9 +300,11 @@
                     const newScale = Math.min(3, Math.max(0.2, startScale * (dist / startDist)));
                     const anchorCX = (startMidX - rectLeft) * (CANVAS_W / rectWidth);
                     const anchorCY = (startMidY - rectTop)  * (CANVAS_H / rectHeight);
-                    const newX = midX - rectLeft + startView.x - anchorCX * newScale;
-                    const newY = midY - rectTop  + startView.y - anchorCY * newScale;
-                    setCanvasView({ scale: newScale, x: newX, y: newY });
+                    setCanvasView({
+                        scale: newScale,
+                        x: midX - rectLeft + startView.x - anchorCX * newScale,
+                        y: midY - rectTop  + startView.y - anchorCY * newScale,
+                    });
                     return;
                 }
                 if (!dragging) return;
@@ -307,31 +357,9 @@
                     }
                     ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2);
                     ctx.fillStyle = c.isInput ? '#ef4444' : '#1e293b'; ctx.fill();
-                    if (c.isInput) { ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke(); }
                     ctx.restore();
                 });
             }, [components, images, gearStates, selectedId]);
-
-            useEffect(() => {
-                const canvas = canvasRef.current;
-                const onWheel = (e) => {
-                    e.preventDefault();
-                    const factor = e.deltaY < 0 ? 1.1 : 1/1.1;
-                    const rect = canvas.getBoundingClientRect();
-                    const anchorCX = (e.clientX - rect.left) * (CANVAS_W / rect.width);
-                    const anchorCY = (e.clientY - rect.top)  * (CANVAS_H / rect.height);
-                    setCanvasView(prev => {
-                        const newScale = Math.min(3, Math.max(0.2, prev.scale * factor));
-                        return {
-                            scale: newScale,
-                            x: e.clientX - rect.left + prev.x - anchorCX * newScale,
-                            y: e.clientY - rect.top  + prev.y - anchorCY * newScale,
-                        };
-                    });
-                };
-                canvas.addEventListener('wheel', onWheel, { passive: false });
-                return () => canvas.removeEventListener('wheel', onWheel);
-            }, []);
 
             const activeImg = useMemo(() => images.find(img => img.id === selectedImgId), [images, selectedImgId]);
 
@@ -342,21 +370,13 @@
                             <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
                             <div>
                                 <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>
-                                <p className="hidden md:block text-[10px] text-slate-400 uppercase tracking-widest font-black leading-none mt-1">350x300mm | 26x25 三角孔位</p>
                             </div>
                         </div>
                     </header>
 
                     <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
-                        <aside className="w-full md:w-80 bg-white border-b md:border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0 order-2 md:order-1 h-2/5 md:h-full overflow-hidden">
-                            <div className="p-3 bg-slate-50 border-b border-slate-200 flex-shrink-0">
-                                <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
-                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg flex-shrink-0 ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}><Icon name={isPlaying ? "Square" : "Play"} size={20} /></button>
-                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center flex-shrink-0"><Icon name="RotateCcw" size={18} /></button>
-                                    <div className="flex-1 border-l pl-3"><div className={`text-[10px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div></div>
-                                </div>
-                            </div>
-                            <div className="flex border-b border-slate-200 bg-slate-50 p-1 flex-shrink-0">
+                        <aside className="w-full md:w-80 bg-white border-b md:border-r border-slate-300 flex flex-col shadow-2xl z-10 flex-shrink-0 order-2 md:order-1 min-h-[220px] h-2/5 md:h-full overflow-hidden">
+                            <div className="flex border-b border-slate-200 bg-slate-50 p-1">
                                 {['upload', 'design'].map(tab => (
                                     <button key={tab} onClick={() => setActiveTab(tab)}
                                         className={`flex-1 py-3 text-xs font-black uppercase transition-all rounded-lg ${activeTab === tab ? 'tab-active shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
@@ -364,7 +384,7 @@
                                     </button>
                                 ))}
                             </div>
-                            
+
                             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-4">
                                 {activeTab === 'upload' && (
                                     <div className="space-y-4 text-slate-600">
@@ -398,11 +418,11 @@
                                         <h3 className="text-[10px] font-black uppercase tracking-widest text-center text-slate-400">新增齒輪 (模數 2.0)</h3>
                                         <div className="grid grid-cols-2 gap-2">
                                             {[12, 18, 24, 30, 36, 48].map(size => (
-                                                <button key={size} onClick={() => addGear(size)} 
+                                                <button key={size} onClick={() => addGear(size)}
                                                     className="gear-btn p-3 border-2 rounded-2xl flex flex-col items-center gap-1 group shadow-sm bg-white"
-                                                    style={{ 
-                                                        borderColor: GEAR_COLORS[size].hex + '40', 
-                                                        color: GEAR_COLORS[size].hex 
+                                                    style={{
+                                                        borderColor: GEAR_COLORS[size].hex + '40',
+                                                        color: GEAR_COLORS[size].hex
                                                     }}
                                                 >
                                                     <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GEAR_COLORS[size].hex }}></div>
@@ -423,10 +443,17 @@
                                 )}
                             </div>
 
+                            <div className="controls-footer p-4 bg-slate-50 border-t border-slate-200">
+                                <div className="flex items-center gap-4 bg-white p-2 md:p-3 rounded-2xl border border-slate-200 shadow-sm">
+                                    <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white shadow-lg ${isPlaying ? 'bg-red-500' : 'bg-green-500'}`}><Icon name={isPlaying ? "Square" : "Play"} size={20} /></button>
+                                    <button onClick={() => { setTime(0); setIsPlaying(false); }} className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center"><Icon name="RotateCcw" size={18} /></button>
+                                    <div className="flex-1 border-l pl-4"><div className={`text-[10px] font-black uppercase ${isPlaying ? 'text-green-500' : 'text-slate-400'}`}>{isPlaying ? '運轉中' : '暫停'}</div></div>
+                                </div>
+                            </div>
                         </aside>
 
                         <main ref={mainRef} className="flex-1 p-2 md:p-8 overflow-hidden flex items-center justify-center bg-slate-300 order-1 md:order-2">
-                            <div className="bg-white rounded-xl shadow-2xl relative border-[8px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H, transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.scale})`, transformOrigin: '0 0' }}>
+                            <div className="bg-white rounded-xl shadow-2xl relative border-[8px] md:border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H, transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.scale})`, transformOrigin: '0 0' }}>
                                 <canvas
                                     ref={canvasRef}
                                     width={CANVAS_W}
@@ -439,7 +466,7 @@
                                     onTouchMove={onMove}
                                     onTouchEnd={endDragging}
                                 />
-                                <div className="absolute top-2 right-2 bg-white/60 backdrop-blur px-2 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">350x300mm | 26x25 Holes</div>
+                                <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-white/60 backdrop-blur px-2 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">350x300mm | 26x25 Holes</div>
                             </div>
                         </main>
                     </div>
