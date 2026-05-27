@@ -94,7 +94,6 @@
             const canvasRef = useRef(null);
             const requestRef = useRef();
             const [canvasView, setCanvasView] = useState({ scale: 1, x: 0, y: 0 });
-            const [rotated, setRotated] = useState(false);
             const pinchRef = useRef(null);
             const mainRef  = useRef(null);
 
@@ -113,14 +112,13 @@
                     const mainW = mainRef.current.clientWidth;
                     const mainH = mainRef.current.clientHeight;
                     const pad = 16;
-                    const [fitW, fitH] = rotated ? [CANVAS_H, CANVAS_W] : [CANVAS_W, CANVAS_H];
-                    const s = Math.min(1, (mainW - 2 * pad) / fitW, (mainH - 2 * pad) / fitH);
+                    const s = Math.min(1, (mainW - 2 * pad) / CANVAS_W, (mainH - 2 * pad) / CANVAS_H);
                     setCanvasView({ scale: s, x: CANVAS_W * (1 - s) / 2, y: CANVAS_H * (1 - s) / 2 });
                 };
                 fit();
                 window.addEventListener('resize', fit);
                 return () => window.removeEventListener('resize', fit);
-            }, [rotated]);
+            }, []);
 
             useEffect(() => {
                 const canvas = canvasRef.current;
@@ -235,15 +233,9 @@
                 const rect = canvasRef.current.getBoundingClientRect();
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                if (rotated) {
-                    return {
-                        x: CANVAS_W - (clientY - rect.top)  * (CANVAS_W / rect.height),
-                        y:            (clientX - rect.left) * (CANVAS_H / rect.width),
-                    };
-                }
                 return {
                     x: (clientX - rect.left) * (CANVAS_W / rect.width),
-                    y: (clientY - rect.top)  * (CANVAS_H / rect.height),
+                    y: (clientY - rect.top) * (CANVAS_H / rect.height)
                 };
             };
 
@@ -361,15 +353,9 @@
                         <div className="flex items-center gap-3">
                             <div className="bg-blue-600 p-2 rounded-xl flex items-center justify-center shadow-inner"><Icon name="Layout" size={24} /></div>
                             <div>
-                                <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>
+                                <h1 className="text-lg md:text-xl font-black leading-none">會動的風景畫：設計助手</h1>            
                             </div>
                         </div>
-                        <button onClick={() => setRotated(r => !r)} title="旋轉畫布 90°"
-                            className={`p-2 rounded-xl transition-all ${rotated ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
-                            </svg>
-                        </button>
                     </header>
 
                     <div className="flex flex-1 overflow-hidden flex-col md:flex-row">
@@ -476,8 +462,7 @@
                         </aside>
 
                         <main ref={mainRef} className="flex-1 p-2 md:p-8 overflow-hidden flex items-center justify-center bg-slate-300 order-1 md:order-2">
-                            <div style={{ transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.scale})`, transformOrigin: '0 0' }}>
-                            <div className="bg-white rounded-xl shadow-2xl relative border-[8px] md:border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H, transform: rotated ? 'rotate(90deg)' : 'none', transformOrigin: `${CANVAS_W/2}px ${CANVAS_H/2}px` }}>
+                            <div className="bg-white rounded-xl shadow-2xl relative border-[8px] md:border-[16px] border-slate-100 ring-1 ring-slate-300 flex-shrink-0 box-content" style={{ width: CANVAS_W, height: CANVAS_H, transform: `translate(${canvasView.x}px, ${canvasView.y}px) scale(${canvasView.scale})`, transformOrigin: '0 0' }}>
                                 <canvas
                                     ref={canvasRef}
                                     width={CANVAS_W}
@@ -491,7 +476,6 @@
                                     onTouchEnd={endDragging}
                                 />
                                 <div className="absolute top-2 right-2 md:top-4 md:right-4 bg-white/60 backdrop-blur px-2 py-1 rounded-full text-[8px] font-black text-slate-500 border border-slate-200 uppercase tracking-widest pointer-events-none">350x300mm | 26x25 Holes</div>
-                            </div>
                             </div>
                         </main>
                     </div>
